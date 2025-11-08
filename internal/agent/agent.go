@@ -276,11 +276,17 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 		// 获取可用工具
 		tools := a.getAvailableTools()
 
-		// 发送进度更新
+		// 发送迭代开始事件
 		if i == 0 {
-			sendProgress("progress", "正在分析请求并制定测试策略...", nil)
+			sendProgress("iteration", "开始分析请求并制定测试策略", map[string]interface{}{
+				"iteration": i + 1,
+				"total":     maxIterations,
+			})
 		} else {
-			sendProgress("progress", fmt.Sprintf("正在继续分析（第 %d 轮迭代）...", i+1), nil)
+			sendProgress("iteration", fmt.Sprintf("第 %d 轮迭代", i+1), map[string]interface{}{
+				"iteration": i + 1,
+				"total":     maxIterations,
+			})
 		}
 
 		// 记录每次调用OpenAI
@@ -333,6 +339,13 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 
 		// 检查是否有工具调用
 		if len(choice.Message.ToolCalls) > 0 {
+			// 如果有思考内容，先发送思考事件
+			if choice.Message.Content != "" {
+				sendProgress("thinking", choice.Message.Content, map[string]interface{}{
+					"iteration": i + 1,
+				})
+			}
+
 			// 添加assistant消息（包含工具调用）
 			messages = append(messages, ChatMessage{
 				Role:      "assistant",
@@ -341,7 +354,10 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 			})
 
 			// 发送工具调用进度
-			sendProgress("progress", fmt.Sprintf("检测到 %d 个工具调用，开始执行...", len(choice.Message.ToolCalls)), nil)
+			sendProgress("tool_calls_detected", fmt.Sprintf("检测到 %d 个工具调用", len(choice.Message.ToolCalls)), map[string]interface{}{
+				"count":     len(choice.Message.ToolCalls),
+				"iteration": i + 1,
+			})
 
 			// 执行所有工具调用
 			for idx, toolCall := range choice.Message.ToolCalls {
@@ -350,8 +366,11 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 				sendProgress("tool_call", fmt.Sprintf("正在调用工具: %s", toolCall.Function.Name), map[string]interface{}{
 					"toolName":  toolCall.Function.Name,
 					"arguments": string(toolArgsJSON),
+					"argumentsObj": toolCall.Function.Arguments,
+					"toolCallId": toolCall.ID,
 					"index":     idx + 1,
 					"total":     len(choice.Message.ToolCalls),
+					"iteration": i + 1,
 				})
 
 				// 执行工具
@@ -369,9 +388,12 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 					sendProgress("tool_result", fmt.Sprintf("工具 %s 执行失败", toolCall.Function.Name), map[string]interface{}{
 						"toolName":  toolCall.Function.Name,
 						"success":   false,
+						"isError":   true,
 						"error":     err.Error(),
+						"toolCallId": toolCall.ID,
 						"index":     idx + 1,
 						"total":     len(choice.Message.ToolCalls),
+						"iteration": i + 1,
 					})
 					
 					a.logger.Warn("工具执行失败，已返回详细错误信息",
@@ -399,10 +421,13 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 						"toolName":    toolCall.Function.Name,
 						"success":     !execResult.IsError,
 						"isError":     execResult.IsError,
-						"result":      resultPreview,
+						"result":      execResult.Result, // 完整结果
+						"resultPreview": resultPreview,   // 预览结果
 						"executionId": execResult.ExecutionID,
+						"toolCallId":  toolCall.ID,
 						"index":       idx + 1,
 						"total":       len(choice.Message.ToolCalls),
+						"iteration":   i + 1,
 					})
 					
 					// 如果工具返回了错误，记录日志但不中断流程
@@ -422,6 +447,13 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 			Role:    "assistant",
 			Content: choice.Message.Content,
 		})
+
+		// 发送AI思考内容（如果没有工具调用）
+		if choice.Message.Content != "" {
+			sendProgress("thinking", choice.Message.Content, map[string]interface{}{
+				"iteration": i + 1,
+			})
+		}
 
 		// 如果完成，返回结果
 		if choice.FinishReason == "stop" {

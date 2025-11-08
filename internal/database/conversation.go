@@ -21,12 +21,13 @@ type Conversation struct {
 
 // Message 消息
 type Message struct {
-	ID              string   `json:"id"`
-	ConversationID  string   `json:"conversationId"`
-	Role            string   `json:"role"`
-	Content         string   `json:"content"`
-	MCPExecutionIDs []string `json:"mcpExecutionIds,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID              string                   `json:"id"`
+	ConversationID  string                   `json:"conversationId"`
+	Role            string                   `json:"role"`
+	Content         string                   `json:"content"`
+	MCPExecutionIDs []string                 `json:"mcpExecutionIds,omitempty"`
+	ProcessDetails  []map[string]interface{} `json:"processDetails,omitempty"`
+	CreatedAt       time.Time                `json:"createdAt"`
 }
 
 // CreateConversation 创建新对话
@@ -90,6 +91,39 @@ func (db *DB) GetConversation(id string) (*Conversation, error) {
 		return nil, fmt.Errorf("加载消息失败: %w", err)
 	}
 	conv.Messages = messages
+
+	// 加载过程详情（按消息ID分组）
+	processDetailsMap, err := db.GetProcessDetailsByConversation(id)
+	if err != nil {
+		db.logger.Warn("加载过程详情失败", zap.Error(err))
+		processDetailsMap = make(map[string][]ProcessDetail)
+	}
+
+	// 将过程详情附加到对应的消息上
+	for i := range conv.Messages {
+		if details, ok := processDetailsMap[conv.Messages[i].ID]; ok {
+			// 将ProcessDetail转换为JSON格式，以便前端使用
+			detailsJSON := make([]map[string]interface{}, len(details))
+			for j, detail := range details {
+				var data interface{}
+				if detail.Data != "" {
+					if err := json.Unmarshal([]byte(detail.Data), &data); err != nil {
+						db.logger.Warn("解析过程详情数据失败", zap.Error(err))
+					}
+				}
+				detailsJSON[j] = map[string]interface{}{
+					"id":             detail.ID,
+					"messageId":      detail.MessageID,
+					"conversationId": detail.ConversationID,
+					"eventType":      detail.EventType,
+					"message":        detail.Message,
+					"data":           data,
+					"createdAt":      detail.CreatedAt,
+				}
+			}
+			conv.Messages[i].ProcessDetails = detailsJSON
+		}
+	}
 
 	return &conv, nil
 }
@@ -252,5 +286,113 @@ func (db *DB) GetMessages(conversationID string) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+// ProcessDetail 过程详情事件
+type ProcessDetail struct {
+	ID            string    `json:"id"`
+	MessageID     string    `json:"messageId"`
+	ConversationID string   `json:"conversationId"`
+	EventType     string    `json:"eventType"` // iteration, thinking, tool_calls_detected, tool_call, tool_result, progress, error
+	Message       string    `json:"message"`
+	Data          string    `json:"data"` // JSON格式的数据
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+// AddProcessDetail 添加过程详情事件
+func (db *DB) AddProcessDetail(messageID, conversationID, eventType, message string, data interface{}) error {
+	id := uuid.New().String()
+	
+	var dataJSON string
+	if data != nil {
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			db.logger.Warn("序列化过程详情数据失败", zap.Error(err))
+		} else {
+			dataJSON = string(jsonData)
+		}
+	}
+
+	_, err := db.Exec(
+		"INSERT INTO process_details (id, message_id, conversation_id, event_type, message, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		id, messageID, conversationID, eventType, message, dataJSON, time.Now(),
+	)
+	if err != nil {
+		return fmt.Errorf("添加过程详情失败: %w", err)
+	}
+
+	return nil
+}
+
+// GetProcessDetails 获取消息的过程详情
+func (db *DB) GetProcessDetails(messageID string) ([]ProcessDetail, error) {
+	rows, err := db.Query(
+		"SELECT id, message_id, conversation_id, event_type, message, data, created_at FROM process_details WHERE message_id = ? ORDER BY created_at ASC",
+		messageID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询过程详情失败: %w", err)
+	}
+	defer rows.Close()
+
+	var details []ProcessDetail
+	for rows.Next() {
+		var detail ProcessDetail
+		var createdAt string
+
+		if err := rows.Scan(&detail.ID, &detail.MessageID, &detail.ConversationID, &detail.EventType, &detail.Message, &detail.Data, &createdAt); err != nil {
+			return nil, fmt.Errorf("扫描过程详情失败: %w", err)
+		}
+
+		// 尝试多种时间格式解析
+		var err error
+		detail.CreatedAt, err = time.Parse("2006-01-02 15:04:05.999999999-07:00", createdAt)
+		if err != nil {
+			detail.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
+		}
+		if err != nil {
+			detail.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		}
+
+		details = append(details, detail)
+	}
+
+	return details, nil
+}
+
+// GetProcessDetailsByConversation 获取对话的所有过程详情（按消息分组）
+func (db *DB) GetProcessDetailsByConversation(conversationID string) (map[string][]ProcessDetail, error) {
+	rows, err := db.Query(
+		"SELECT id, message_id, conversation_id, event_type, message, data, created_at FROM process_details WHERE conversation_id = ? ORDER BY created_at ASC",
+		conversationID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询过程详情失败: %w", err)
+	}
+	defer rows.Close()
+
+	detailsMap := make(map[string][]ProcessDetail)
+	for rows.Next() {
+		var detail ProcessDetail
+		var createdAt string
+
+		if err := rows.Scan(&detail.ID, &detail.MessageID, &detail.ConversationID, &detail.EventType, &detail.Message, &detail.Data, &createdAt); err != nil {
+			return nil, fmt.Errorf("扫描过程详情失败: %w", err)
+		}
+
+		// 尝试多种时间格式解析
+		var err error
+		detail.CreatedAt, err = time.Parse("2006-01-02 15:04:05.999999999-07:00", createdAt)
+		if err != nil {
+			detail.CreatedAt, err = time.Parse("2006-01-02 15:04:05", createdAt)
+		}
+		if err != nil {
+			detail.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		}
+
+		detailsMap[detail.MessageID] = append(detailsMap[detail.MessageID], detail)
+	}
+
+	return detailsMap, nil
 }
 

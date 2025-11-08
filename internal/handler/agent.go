@@ -220,9 +220,29 @@ func (h *AgentHandler) AgentLoopStream(c *gin.Context) {
 		h.logger.Error("保存用户消息失败", zap.Error(err))
 	}
 
-	// 创建进度回调函数
+	// 预先创建助手消息，以便关联过程详情
+	assistantMsg, err := h.db.AddMessage(conversationID, "assistant", "处理中...", nil)
+	if err != nil {
+		h.logger.Error("创建助手消息失败", zap.Error(err))
+		// 如果创建失败，继续执行但不保存过程详情
+		assistantMsg = nil
+	}
+
+	// 创建进度回调函数，同时保存到数据库
+	var assistantMessageID string
+	if assistantMsg != nil {
+		assistantMessageID = assistantMsg.ID
+	}
+	
 	progressCallback := func(eventType, message string, data interface{}) {
 		sendEvent(eventType, message, data)
+		
+		// 保存过程详情到数据库（排除response和done事件，它们会在后面单独处理）
+		if assistantMessageID != "" && eventType != "response" && eventType != "done" {
+			if err := h.db.AddProcessDetail(assistantMessageID, conversationID, eventType, message, data); err != nil {
+				h.logger.Warn("保存过程详情失败", zap.Error(err), zap.String("eventType", eventType))
+			}
+		}
 	}
 
 	// 执行Agent Loop，传入进度回调
@@ -231,20 +251,44 @@ func (h *AgentHandler) AgentLoopStream(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("Agent Loop执行失败", zap.Error(err))
 		sendEvent("error", "执行失败: "+err.Error(), nil)
+		// 保存错误事件
+		if assistantMessageID != "" {
+			h.db.AddProcessDetail(assistantMessageID, conversationID, "error", "执行失败: "+err.Error(), nil)
+		}
 		sendEvent("done", "", nil)
 		return
 	}
 
-	// 保存助手回复
-	_, err = h.db.AddMessage(conversationID, "assistant", result.Response, result.MCPExecutionIDs)
-	if err != nil {
-		h.logger.Error("保存助手消息失败", zap.Error(err))
+	// 更新助手消息内容
+	if assistantMsg != nil {
+		_, err = h.db.Exec(
+			"UPDATE messages SET content = ?, mcp_execution_ids = ? WHERE id = ?",
+			result.Response,
+			func() string {
+				if len(result.MCPExecutionIDs) > 0 {
+					jsonData, _ := json.Marshal(result.MCPExecutionIDs)
+					return string(jsonData)
+				}
+				return ""
+			}(),
+			assistantMessageID,
+		)
+		if err != nil {
+			h.logger.Error("更新助手消息失败", zap.Error(err))
+		}
+	} else {
+		// 如果之前创建失败，现在创建
+		_, err = h.db.AddMessage(conversationID, "assistant", result.Response, result.MCPExecutionIDs)
+		if err != nil {
+			h.logger.Error("保存助手消息失败", zap.Error(err))
+		}
 	}
 
 	// 发送最终响应
 	sendEvent("response", result.Response, map[string]interface{}{
 		"mcpExecutionIds": result.MCPExecutionIDs,
 		"conversationId":  conversationID,
+		"messageId":       assistantMessageID, // 包含消息ID，以便前端关联过程详情
 	})
 	sendEvent("done", "", map[string]interface{}{
 		"conversationId": conversationID,

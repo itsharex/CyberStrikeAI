@@ -61,10 +61,26 @@ func (db *DB) initTables() error {
 		FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 	);`
 
+	// 创建过程详情表
+	createProcessDetailsTable := `
+	CREATE TABLE IF NOT EXISTS process_details (
+		id TEXT PRIMARY KEY,
+		message_id TEXT NOT NULL,
+		conversation_id TEXT NOT NULL,
+		event_type TEXT NOT NULL,
+		message TEXT,
+		data TEXT,
+		created_at DATETIME NOT NULL,
+		FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+		FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+	);`
+
 	// 创建索引
 	createIndexes := `
 	CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 	CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
+	CREATE INDEX IF NOT EXISTS idx_process_details_message_id ON process_details(message_id);
+	CREATE INDEX IF NOT EXISTS idx_process_details_conversation_id ON process_details(conversation_id);
 	`
 
 	if _, err := db.Exec(createConversationsTable); err != nil {
@@ -73,6 +89,10 @@ func (db *DB) initTables() error {
 
 	if _, err := db.Exec(createMessagesTable); err != nil {
 		return fmt.Errorf("创建messages表失败: %w", err)
+	}
+
+	if _, err := db.Exec(createProcessDetailsTable); err != nil {
+		return fmt.Errorf("创建process_details表失败: %w", err)
 	}
 
 	if _, err := db.Exec(createIndexes); err != nil {

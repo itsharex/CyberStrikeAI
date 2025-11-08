@@ -15,10 +15,9 @@ async function sendMessage() {
     addMessage('user', message);
     input.value = '';
     
-    // 创建进度消息容器
-    const progressId = addMessage('system', '正在处理中...');
+    // 创建进度消息容器（使用详细的进度展示）
+    const progressId = addProgressMessage();
     const progressElement = document.getElementById(progressId);
-    const progressBubble = progressElement.querySelector('.message-bubble');
     let assistantMessageId = null;
     let mcpExecutionIds = [];
     
@@ -54,7 +53,7 @@ async function sendMessage() {
                 if (line.startsWith('data: ')) {
                     try {
                         const eventData = JSON.parse(line.slice(6));
-                        handleStreamEvent(eventData, progressElement, progressBubble, progressId, 
+                        handleStreamEvent(eventData, progressElement, progressId, 
                                          () => assistantMessageId, (id) => { assistantMessageId = id; },
                                          () => mcpExecutionIds, (ids) => { mcpExecutionIds = ids; });
                     } catch (e) {
@@ -71,7 +70,7 @@ async function sendMessage() {
                 if (line.startsWith('data: ')) {
                     try {
                         const eventData = JSON.parse(line.slice(6));
-                        handleStreamEvent(eventData, progressElement, progressBubble, progressId,
+                        handleStreamEvent(eventData, progressElement, progressId,
                                          () => assistantMessageId, (id) => { assistantMessageId = id; },
                                          () => mcpExecutionIds, (ids) => { mcpExecutionIds = ids; });
                     } catch (e) {
@@ -87,13 +86,243 @@ async function sendMessage() {
     }
 }
 
+// 创建进度消息容器
+function addProgressMessage() {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageCounter++;
+    const id = 'progress-' + Date.now() + '-' + messageCounter;
+    messageDiv.id = id;
+    messageDiv.className = 'message system progress-message';
+    
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'message-content';
+    
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble progress-container';
+    bubble.innerHTML = `
+        <div class="progress-header">
+            <span class="progress-title">🔍 渗透测试进行中...</span>
+            <button class="progress-toggle" onclick="toggleProgressDetails('${id}')">收起详情</button>
+        </div>
+        <div class="progress-timeline expanded" id="${id}-timeline"></div>
+    `;
+    
+    contentWrapper.appendChild(bubble);
+    messageDiv.appendChild(contentWrapper);
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    return id;
+}
+
+// 切换进度详情显示
+function toggleProgressDetails(progressId) {
+    const timeline = document.getElementById(progressId + '-timeline');
+    const toggleBtn = document.querySelector(`#${progressId} .progress-toggle`);
+    
+    if (!timeline || !toggleBtn) return;
+    
+    if (timeline.classList.contains('expanded')) {
+        timeline.classList.remove('expanded');
+        toggleBtn.textContent = '展开详情';
+    } else {
+        timeline.classList.add('expanded');
+        toggleBtn.textContent = '收起详情';
+    }
+}
+
+// 将进度详情集成到工具调用区域
+function integrateProgressToMCPSection(progressId, assistantMessageId) {
+    const progressElement = document.getElementById(progressId);
+    if (!progressElement) return;
+    
+    // 获取时间线内容
+    const timeline = document.getElementById(progressId + '-timeline');
+    let timelineHTML = '';
+    if (timeline) {
+        timelineHTML = timeline.innerHTML;
+    }
+    
+    // 获取助手消息元素
+    const assistantElement = document.getElementById(assistantMessageId);
+    if (!assistantElement) {
+        removeMessage(progressId);
+        return;
+    }
+    
+    // 查找MCP调用区域
+    const mcpSection = assistantElement.querySelector('.mcp-call-section');
+    if (!mcpSection) {
+        // 如果没有MCP区域，创建详情组件放在消息下方
+        convertProgressToDetails(progressId, assistantMessageId);
+        return;
+    }
+    
+    // 获取时间线内容
+    const hasContent = timelineHTML.trim().length > 0;
+    
+    // 确保按钮容器存在
+    let buttonsContainer = mcpSection.querySelector('.mcp-call-buttons');
+    if (!buttonsContainer) {
+        buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'mcp-call-buttons';
+        mcpSection.appendChild(buttonsContainer);
+    }
+    
+    // 创建详情容器，放在MCP按钮区域下方（统一结构）
+    const detailsId = 'process-details-' + assistantMessageId;
+    let detailsContainer = document.getElementById(detailsId);
+    
+    if (!detailsContainer) {
+        detailsContainer = document.createElement('div');
+        detailsContainer.id = detailsId;
+        detailsContainer.className = 'process-details-container';
+        // 确保容器在按钮容器之后
+        if (buttonsContainer.nextSibling) {
+            mcpSection.insertBefore(detailsContainer, buttonsContainer.nextSibling);
+        } else {
+            mcpSection.appendChild(detailsContainer);
+        }
+    }
+    
+    // 设置详情内容
+    detailsContainer.innerHTML = `
+        <div class="process-details-content">
+            ${hasContent ? `<div class="progress-timeline" id="${detailsId}-timeline">${timelineHTML}</div>` : '<div class="progress-timeline-empty">暂无过程详情</div>'}
+        </div>
+    `;
+    
+    // 移除原来的进度消息
+    removeMessage(progressId);
+}
+
+// 切换过程详情显示
+function toggleProcessDetails(progressId, assistantMessageId) {
+    const detailsId = 'process-details-' + assistantMessageId;
+    const detailsContainer = document.getElementById(detailsId);
+    if (!detailsContainer) return;
+    
+    const content = detailsContainer.querySelector('.process-details-content');
+    const timeline = detailsContainer.querySelector('.progress-timeline');
+    const btn = document.querySelector(`#${assistantMessageId} .process-detail-btn`);
+    
+    if (content && timeline) {
+        if (timeline.classList.contains('expanded')) {
+            timeline.classList.remove('expanded');
+            if (btn) btn.innerHTML = '<span>📋 过程详情</span>';
+        } else {
+            timeline.classList.add('expanded');
+            if (btn) btn.innerHTML = '<span>📋 收起详情</span>';
+        }
+    } else if (timeline) {
+        // 如果只有timeline，直接切换
+        if (timeline.classList.contains('expanded')) {
+            timeline.classList.remove('expanded');
+            if (btn) btn.innerHTML = '<span>📋 过程详情</span>';
+        } else {
+            timeline.classList.add('expanded');
+            if (btn) btn.innerHTML = '<span>📋 收起详情</span>';
+        }
+    }
+}
+
+// 将进度消息转换为可折叠的详情组件
+function convertProgressToDetails(progressId, assistantMessageId) {
+    const progressElement = document.getElementById(progressId);
+    if (!progressElement) return;
+    
+    // 获取时间线内容
+    const timeline = document.getElementById(progressId + '-timeline');
+    // 即使时间线不存在，也创建详情组件（显示空状态）
+    let timelineHTML = '';
+    if (timeline) {
+        timelineHTML = timeline.innerHTML;
+    }
+    
+    // 获取助手消息元素
+    const assistantElement = document.getElementById(assistantMessageId);
+    if (!assistantElement) {
+        removeMessage(progressId);
+        return;
+    }
+    
+    // 创建详情组件
+    const detailsId = 'details-' + Date.now() + '-' + messageCounter++;
+    const detailsDiv = document.createElement('div');
+    detailsDiv.id = detailsId;
+    detailsDiv.className = 'message system progress-details';
+    
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'message-content';
+    
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble progress-container completed';
+    
+    // 获取时间线HTML内容
+    const hasContent = timelineHTML.trim().length > 0;
+    
+    // 总是显示详情组件，即使没有内容也显示
+    bubble.innerHTML = `
+        <div class="progress-header">
+            <span class="progress-title">📋 渗透测试详情</span>
+            ${hasContent ? `<button class="progress-toggle" onclick="toggleProgressDetails('${detailsId}')">收起详情</button>` : ''}
+        </div>
+        ${hasContent ? `<div class="progress-timeline expanded" id="${detailsId}-timeline">${timelineHTML}</div>` : '<div class="progress-timeline-empty">暂无过程详情（可能执行过快或未触发详细事件）</div>'}
+    `;
+    
+    contentWrapper.appendChild(bubble);
+    detailsDiv.appendChild(contentWrapper);
+    
+    // 将详情组件插入到助手消息之后
+    const messagesDiv = document.getElementById('chat-messages');
+    // assistantElement 是消息div，需要插入到它的下一个兄弟节点之前
+    if (assistantElement.nextSibling) {
+        messagesDiv.insertBefore(detailsDiv, assistantElement.nextSibling);
+    } else {
+        // 如果没有下一个兄弟节点，直接追加
+        messagesDiv.appendChild(detailsDiv);
+    }
+    
+    // 移除原来的进度消息
+    removeMessage(progressId);
+    
+    // 滚动到底部
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
 // 处理流式事件
-function handleStreamEvent(event, progressElement, progressBubble, progressId, 
+function handleStreamEvent(event, progressElement, progressId, 
                           getAssistantId, setAssistantId, getMcpIds, setMcpIds) {
+    const timeline = document.getElementById(progressId + '-timeline');
+    if (!timeline) return;
+    
     switch (event.type) {
-        case 'progress':
-            // 更新进度消息
-            progressBubble.textContent = event.message;
+        case 'iteration':
+            // 添加迭代标记
+            addTimelineItem(timeline, 'iteration', {
+                title: `第 ${event.data?.iteration || 1} 轮迭代`,
+                message: event.message,
+                data: event.data
+            });
+            break;
+            
+        case 'thinking':
+            // 显示AI思考内容
+            addTimelineItem(timeline, 'thinking', {
+                title: '🤔 AI思考',
+                message: event.message,
+                data: event.data
+            });
+            break;
+            
+        case 'tool_calls_detected':
+            // 工具调用检测
+            addTimelineItem(timeline, 'tool_calls_detected', {
+                title: `🔧 检测到 ${event.data?.count || 0} 个工具调用`,
+                message: event.message,
+                data: event.data
+            });
             break;
             
         case 'tool_call':
@@ -102,7 +331,12 @@ function handleStreamEvent(event, progressElement, progressBubble, progressId,
             const toolName = toolInfo.toolName || '未知工具';
             const index = toolInfo.index || 0;
             const total = toolInfo.total || 0;
-            progressBubble.innerHTML = `🔧 正在调用工具: <strong>${escapeHtml(toolName)}</strong> (${index}/${total})`;
+            addTimelineItem(timeline, 'tool_call', {
+                title: `🔧 调用工具: ${escapeHtml(toolName)} (${index}/${total})`,
+                message: event.message,
+                data: toolInfo,
+                expanded: false
+            });
             break;
             
         case 'tool_result':
@@ -111,12 +345,24 @@ function handleStreamEvent(event, progressElement, progressBubble, progressId,
             const resultToolName = resultInfo.toolName || '未知工具';
             const success = resultInfo.success !== false;
             const statusIcon = success ? '✅' : '❌';
-            progressBubble.innerHTML = `${statusIcon} 工具 <strong>${escapeHtml(resultToolName)}</strong> 执行${success ? '完成' : '失败'}`;
+            addTimelineItem(timeline, 'tool_result', {
+                title: `${statusIcon} 工具 ${escapeHtml(resultToolName)} 执行${success ? '完成' : '失败'}`,
+                message: event.message,
+                data: resultInfo,
+                expanded: false
+            });
+            break;
+            
+        case 'progress':
+            // 更新进度状态
+            const progressTitle = document.querySelector(`#${progressId} .progress-title`);
+            if (progressTitle) {
+                progressTitle.textContent = '🔍 ' + event.message;
+            }
             break;
             
         case 'response':
-            // 移除进度消息，显示最终回复
-            removeMessage(progressId);
+            // 先添加助手回复
             const responseData = event.data || {};
             const mcpIds = responseData.mcpExecutionIds || [];
             setMcpIds(mcpIds);
@@ -127,9 +373,12 @@ function handleStreamEvent(event, progressElement, progressBubble, progressId,
                 updateActiveConversation();
             }
             
-            // 添加助手回复
-            const assistantId = addMessage('assistant', event.message, mcpIds);
+            // 添加助手回复，并传入进度ID以便集成详情
+            const assistantId = addMessage('assistant', event.message, mcpIds, progressId);
             setAssistantId(assistantId);
+            
+            // 将进度详情集成到工具调用区域
+            integrateProgressToMCPSection(progressId, assistantId);
             
             // 刷新对话列表
             loadConversations();
@@ -137,14 +386,18 @@ function handleStreamEvent(event, progressElement, progressBubble, progressId,
             
         case 'error':
             // 显示错误
-            removeMessage(progressId);
-            addMessage('system', '错误: ' + event.message);
+            addTimelineItem(timeline, 'error', {
+                title: '❌ 错误',
+                message: event.message,
+                data: event.data
+            });
             break;
             
         case 'done':
-            // 完成，确保进度消息已移除
-            if (progressElement && progressElement.parentNode) {
-                removeMessage(progressId);
+            // 完成，更新进度标题（如果进度消息还存在）
+            const doneTitle = document.querySelector(`#${progressId} .progress-title`);
+            if (doneTitle) {
+                doneTitle.textContent = '✅ 渗透测试完成';
             }
             // 更新对话ID
             if (event.data && event.data.conversationId) {
@@ -153,13 +406,72 @@ function handleStreamEvent(event, progressElement, progressBubble, progressId,
             }
             break;
     }
+    
+    // 自动滚动到底部
+    const messagesDiv = document.getElementById('chat-messages');
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// 添加时间线项目
+function addTimelineItem(timeline, type, options) {
+    const item = document.createElement('div');
+    item.className = `timeline-item timeline-item-${type}`;
+    
+    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    let content = `
+        <div class="timeline-item-header">
+            <span class="timeline-item-time">${time}</span>
+            <span class="timeline-item-title">${options.title}</span>
+        </div>
+    `;
+    
+    // 根据类型添加详细内容
+    if (type === 'thinking' && options.message) {
+        content += `<div class="timeline-item-content">${formatMarkdown(options.message)}</div>`;
+    } else if (type === 'tool_call' && options.data) {
+        const data = options.data;
+        const args = data.argumentsObj || (data.arguments ? JSON.parse(data.arguments) : {});
+        content += `
+            <div class="timeline-item-content">
+                <div class="tool-details">
+                    <div class="tool-arg-section">
+                        <strong>参数:</strong>
+                        <pre class="tool-args">${JSON.stringify(args, null, 2)}</pre>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (type === 'tool_result' && options.data) {
+        const data = options.data;
+        const isError = data.isError || !data.success;
+        const result = data.result || data.error || '无结果';
+        content += `
+            <div class="timeline-item-content">
+                <div class="tool-result-section ${isError ? 'error' : 'success'}">
+                    <strong>执行结果:</strong>
+                    <pre class="tool-result">${escapeHtml(result)}</pre>
+                    ${data.executionId ? `<div class="tool-execution-id">执行ID: <code>${data.executionId}</code></div>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    item.innerHTML = content;
+    timeline.appendChild(item);
+    
+    // 自动展开详情
+    const expanded = timeline.classList.contains('expanded');
+    if (!expanded && (type === 'tool_call' || type === 'tool_result')) {
+        // 对于工具调用和结果，默认显示摘要
+    }
 }
 
 // 消息计数器，确保ID唯一
 let messageCounter = 0;
 
 // 添加消息
-function addMessage(role, content, mcpExecutionIds = null) {
+function addMessage(role, content, mcpExecutionIds = null, progressId = null) {
     const messagesDiv = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
     messageCounter++;
@@ -238,6 +550,17 @@ function addMessage(role, content, mcpExecutionIds = null) {
             buttonsContainer.appendChild(detailBtn);
         });
         
+        // 如果有进度ID，添加过程详情按钮
+        if (progressId) {
+            const progressDetailBtn = document.createElement('button');
+            progressDetailBtn.className = 'mcp-detail-btn process-detail-btn';
+            progressDetailBtn.innerHTML = `<span>📋 过程详情</span>`;
+            progressDetailBtn.onclick = () => toggleProcessDetails(progressId, messageDiv.id);
+            buttonsContainer.appendChild(progressDetailBtn);
+            // 存储进度ID到消息元素
+            messageDiv.dataset.progressId = progressId;
+        }
+        
         mcpSection.appendChild(buttonsContainer);
         contentWrapper.appendChild(mcpSection);
     }
@@ -246,6 +569,131 @@ function addMessage(role, content, mcpExecutionIds = null) {
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
     return id;
+}
+
+// 渲染过程详情
+function renderProcessDetails(messageId, processDetails) {
+    if (!processDetails || processDetails.length === 0) {
+        return;
+    }
+    
+    const messageElement = document.getElementById(messageId);
+    if (!messageElement) {
+        return;
+    }
+    
+    // 查找或创建MCP调用区域
+    let mcpSection = messageElement.querySelector('.mcp-call-section');
+    if (!mcpSection) {
+        mcpSection = document.createElement('div');
+        mcpSection.className = 'mcp-call-section';
+        
+        const contentWrapper = messageElement.querySelector('.message-content');
+        if (contentWrapper) {
+            contentWrapper.appendChild(mcpSection);
+        } else {
+            return;
+        }
+    }
+    
+    // 确保有标签和按钮容器（统一结构）
+    let mcpLabel = mcpSection.querySelector('.mcp-call-label');
+    let buttonsContainer = mcpSection.querySelector('.mcp-call-buttons');
+    
+    // 如果没有标签，创建一个（当没有工具调用时）
+    if (!mcpLabel && !buttonsContainer) {
+        mcpLabel = document.createElement('div');
+        mcpLabel.className = 'mcp-call-label';
+        mcpLabel.textContent = '过程详情';
+        mcpSection.appendChild(mcpLabel);
+    }
+    
+    // 如果没有按钮容器，创建一个
+    if (!buttonsContainer) {
+        buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'mcp-call-buttons';
+        mcpSection.appendChild(buttonsContainer);
+    }
+    
+    // 添加过程详情按钮（如果还没有）
+    let processDetailBtn = buttonsContainer.querySelector('.process-detail-btn');
+    if (!processDetailBtn) {
+        processDetailBtn = document.createElement('button');
+        processDetailBtn.className = 'mcp-detail-btn process-detail-btn';
+        processDetailBtn.innerHTML = '<span>📋 过程详情</span>';
+        processDetailBtn.onclick = () => toggleProcessDetails(null, messageId);
+        buttonsContainer.appendChild(processDetailBtn);
+    }
+    
+    // 创建过程详情容器（放在按钮容器之后）
+    const detailsId = 'process-details-' + messageId;
+    let detailsContainer = document.getElementById(detailsId);
+    
+    if (!detailsContainer) {
+        detailsContainer = document.createElement('div');
+        detailsContainer.id = detailsId;
+        detailsContainer.className = 'process-details-container';
+        // 确保容器在按钮容器之后
+        if (buttonsContainer.nextSibling) {
+            mcpSection.insertBefore(detailsContainer, buttonsContainer.nextSibling);
+        } else {
+            mcpSection.appendChild(detailsContainer);
+        }
+    }
+    
+    // 创建时间线
+    const timelineId = detailsId + '-timeline';
+    let timeline = document.getElementById(timelineId);
+    
+    if (!timeline) {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'process-details-content';
+        
+        timeline = document.createElement('div');
+        timeline.id = timelineId;
+        timeline.className = 'progress-timeline';
+        
+        contentDiv.appendChild(timeline);
+        detailsContainer.appendChild(contentDiv);
+    }
+    
+    // 清空时间线并重新渲染
+    timeline.innerHTML = '';
+    
+    // 渲染每个过程详情事件
+    processDetails.forEach(detail => {
+        const eventType = detail.eventType || '';
+        const title = detail.message || '';
+        const data = detail.data || {};
+        
+        // 根据事件类型渲染不同的内容
+        let itemTitle = title;
+        if (eventType === 'iteration') {
+            itemTitle = `第 ${data.iteration || 1} 轮迭代`;
+        } else if (eventType === 'thinking') {
+            itemTitle = '🤔 AI思考';
+        } else if (eventType === 'tool_calls_detected') {
+            itemTitle = `🔧 检测到 ${data.count || 0} 个工具调用`;
+        } else if (eventType === 'tool_call') {
+            const toolName = data.toolName || '未知工具';
+            const index = data.index || 0;
+            const total = data.total || 0;
+            itemTitle = `🔧 调用工具: ${escapeHtml(toolName)} (${index}/${total})`;
+        } else if (eventType === 'tool_result') {
+            const toolName = data.toolName || '未知工具';
+            const success = data.success !== false;
+            const statusIcon = success ? '✅' : '❌';
+            itemTitle = `${statusIcon} 工具 ${escapeHtml(toolName)} 执行${success ? '完成' : '失败'}`;
+        } else if (eventType === 'error') {
+            itemTitle = '❌ 错误';
+        }
+        
+        addTimelineItem(timeline, eventType, {
+            title: itemTitle,
+            message: detail.message || '',
+            data: data
+        });
+    });
 }
 
 // 移除消息
@@ -357,6 +805,23 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function formatMarkdown(text) {
+    if (typeof marked !== 'undefined') {
+        try {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+            });
+            return marked.parse(text);
+        } catch (e) {
+            console.error('Markdown 解析失败:', e);
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+    } else {
+        return escapeHtml(text).replace(/\n/g, '<br>');
+    }
+}
+
 // 开始新对话
 function startNewConversation() {
     currentConversationId = null;
@@ -387,10 +852,14 @@ async function loadConversations() {
                 item.classList.add('active');
             }
             
+            // 创建内容容器
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'conversation-content';
+            
             const title = document.createElement('div');
             title.className = 'conversation-title';
             title.textContent = conv.title || '未命名对话';
-            item.appendChild(title);
+            contentWrapper.appendChild(title);
             
             const time = document.createElement('div');
             time.className = 'conversation-time';
@@ -448,7 +917,25 @@ async function loadConversations() {
             }
             
             time.textContent = timeText;
-            item.appendChild(time);
+            contentWrapper.appendChild(time);
+            
+            item.appendChild(contentWrapper);
+            
+            // 创建删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'conversation-delete-btn';
+            deleteBtn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14zM10 11v6M14 11v6" 
+                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
+            deleteBtn.title = '删除对话';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation(); // 阻止触发对话加载
+                deleteConversation(conv.id);
+            };
+            item.appendChild(deleteBtn);
             
             item.onclick = () => loadConversation(conv.id);
             listContainer.appendChild(item);
@@ -480,7 +967,14 @@ async function loadConversation(conversationId) {
         // 加载消息
         if (conversation.messages && conversation.messages.length > 0) {
             conversation.messages.forEach(msg => {
-                addMessage(msg.role, msg.content, msg.mcpExecutionIds || []);
+                const messageId = addMessage(msg.role, msg.content, msg.mcpExecutionIds || []);
+                // 如果有过程详情，显示它们
+                if (msg.processDetails && msg.processDetails.length > 0 && msg.role === 'assistant') {
+                    // 延迟一下，确保消息已经渲染
+                    setTimeout(() => {
+                        renderProcessDetails(messageId, msg.processDetails);
+                    }, 100);
+                }
             });
         } else {
             addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');
@@ -494,6 +988,38 @@ async function loadConversation(conversationId) {
     } catch (error) {
         console.error('加载对话失败:', error);
         alert('加载对话失败: ' + error.message);
+    }
+}
+
+// 删除对话
+async function deleteConversation(conversationId) {
+    // 确认删除
+    if (!confirm('确定要删除这个对话吗？此操作不可恢复。')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/conversations/${conversationId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '删除失败');
+        }
+        
+        // 如果删除的是当前对话，清空对话界面
+        if (conversationId === currentConversationId) {
+            currentConversationId = null;
+            document.getElementById('chat-messages').innerHTML = '';
+            addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');
+        }
+        
+        // 刷新对话列表
+        loadConversations();
+    } catch (error) {
+        console.error('删除对话失败:', error);
+        alert('删除对话失败: ' + error.message);
     }
 }
 
