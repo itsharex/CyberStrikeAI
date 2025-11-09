@@ -30,4 +30,20 @@ parameters:
     description: "替换字符串"
     required: false
     default: "FUZZ"
+  
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的Qsreplace参数。用于传递未在参数列表中定义的Qsreplace选项。
+      
+      **示例值：**
+      - "-a": 追加模式
+      - "-d": 删除参数
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
 

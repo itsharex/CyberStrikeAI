@@ -72,4 +72,44 @@ parameters:
     required: false
     flag: "-p"
     format: "flag"
+  
+  - name: "scan_type"
+    type: "string"
+    description: |
+      扫描类型选项。可以覆盖默认的扫描类型。
+      
+      **常用选项：**
+      - "-sV": 版本检测
+      - "-sC": 默认脚本扫描
+      - "-sS": SYN扫描（需要root权限）
+      - "-sT": TCP连接扫描（默认）
+      - "-sU": UDP扫描
+      - "-A": 全面扫描（OS检测、版本检测、脚本扫描、路由追踪）
+      
+      **注意事项：**
+      - 多个选项可以组合，用空格分隔，例如: "-sV -sC"
+      - 默认已包含 "-sT -sV -sC"
+      - 如果指定此参数，将替换默认的扫描类型
+    required: false
+    flag: ""
+    format: "positional"
+  
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的Nmap参数。用于传递未在参数列表中定义的Nmap选项。
+      
+      **示例值：**
+      - "--script vuln": 运行漏洞检测脚本
+      - "-O": 操作系统检测
+      - "-T4": 时间模板（0-5，数字越大越快）
+      - "--max-retries 3": 最大重试次数
+      - "-v": 详细输出
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
 
