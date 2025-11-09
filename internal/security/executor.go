@@ -256,7 +256,27 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 
 			// 布尔值特殊处理：如果为 false，跳过；如果为 true，只添加标志
 			if param.Type == "bool" {
-				if boolVal, ok := value.(bool); ok {
+				var boolVal bool
+				var ok bool
+				
+				// 尝试多种类型转换
+				if boolVal, ok = value.(bool); ok {
+					// 已经是布尔值
+				} else if numVal, ok := value.(float64); ok {
+					// JSON 数字类型（float64）
+					boolVal = numVal != 0
+					ok = true
+				} else if numVal, ok := value.(int); ok {
+					// int 类型
+					boolVal = numVal != 0
+					ok = true
+				} else if strVal, ok := value.(string); ok {
+					// 字符串类型
+					boolVal = strVal == "true" || strVal == "1" || strVal == "yes"
+					ok = true
+				}
+				
+				if ok {
 					if !boolVal {
 						continue // false 时不添加任何参数
 					}

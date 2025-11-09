@@ -618,10 +618,13 @@ header {
     background: var(--bg-primary);
     border-top: 1px solid var(--border-color);
     flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.chat-input-container input {
+.chat-input-container textarea {
     flex: 1;
+    min-width: 0;
     padding: 12px 16px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -630,14 +633,46 @@ header {
     transition: all 0.2s;
     background: var(--bg-primary);
     color: var(--text-primary);
+    resize: none;
+    height: 44px;
+    font-family: inherit;
+    line-height: 1.5;
+    overflow-y: auto;
+    box-sizing: border-box;
+    /* 隐藏滚动条但保留滚动功能 */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: transparent transparent; /* Firefox - 隐藏滚动条 */
 }
 
-.chat-input-container input:focus {
+/* WebKit 浏览器（Chrome, Safari, Edge）的滚动条样式 - 隐藏但保留功能 */
+.chat-input-container textarea::-webkit-scrollbar {
+    width: 4px; /* 最窄的滚动条 */
+}
+
+.chat-input-container textarea::-webkit-scrollbar-track {
+    background: transparent; /* 隐藏轨道 */
+}
+
+.chat-input-container textarea::-webkit-scrollbar-thumb {
+    background: transparent; /* 默认隐藏滑块 */
+    border-radius: 2px;
+}
+
+/* 鼠标悬停时显示滚动条 */
+.chat-input-container textarea:hover::-webkit-scrollbar-thumb {
+    background: var(--text-muted); /* 悬停时显示 */
+}
+
+.chat-input-container textarea:focus::-webkit-scrollbar-thumb {
+    background: var(--text-muted); /* 聚焦时显示 */
+}
+
+.chat-input-container textarea:focus {
     border-color: var(--accent-color);
     box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
 }
 
-.chat-input-container input::placeholder {
+.chat-input-container textarea::placeholder {
     color: var(--text-muted);
 }
 

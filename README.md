@@ -1,6 +1,6 @@
 # CyberStrikeAI
 
-🚀 **下一代AI自主渗透测试平台** - 基于Golang构建，内置98+安全工具，支持灵活扩展自定义工具，通过MCP协议实现AI智能决策与自动化执行，让安全测试像对话一样简单。
+🚀 **下一代AI自主渗透测试平台** - 基于Golang构建，内置上百个安全工具，支持灵活扩展自定义工具，通过MCP协议实现AI智能决策与自动化执行，让安全测试像对话一样简单。
   ![详情预览](./img/效果1.png)
 
 ## ✨ 功能特性
@@ -8,7 +8,7 @@
 ### 核心功能
 - 🤖 **AI智能代理** - 集成OpenAI兼容API（支持GPT、Claude、DeepSeek等），AI自主决策和执行安全测试
 - 🧠 **智能决策引擎** - AI分析目标并自动选择最佳测试策略和工具组合
-- ⚡ **自主执行** - AI代理自动调用安全工具，无需人工干预
+- ⚡ **自主执行** - AI代理自动调用安全工具，无需人工干预，最多支持30轮迭代
 - 🔄 **自适应调整** - 根据工具执行结果和发现的漏洞，AI自动调整测试策略
 - 📝 **智能总结** - 达到最大迭代次数时，AI自动总结测试结果并提供下一步执行计划
 - 💬 **对话式交互** - 自然语言对话界面，支持流式输出（SSE），实时查看执行过程
@@ -86,7 +86,7 @@ CyberStrikeAI/
 
 - Go 1.21 或更高版本
 - OpenAI API Key（或其他兼容OpenAI协议的API，如DeepSeek、Claude等）
-- 安全工具（可选）：根据您的需求安装相应的安全工具，系统支持98+个工具
+- 安全工具（可选）：根据您的需求安装相应的安全工具，系统支持上百个工具
 
 ### 安装步骤
 
@@ -132,7 +132,7 @@ security:
 
 4. **安装安全工具（可选）**
 
-根据您的需求安装相应的安全工具。系统支持98+个工具，您可以根据实际需要选择性安装：
+根据您的需求安装相应的安全工具。系统支持上百个工具，您可以根据实际需要选择性安装：
 
 ```bash
 # macOS (使用Homebrew)
@@ -301,6 +301,81 @@ parameters:
 #### 6. 多步骤测试
 ```
 首先扫描 192.168.1.1 的开放端口，然后对发现的Web服务进行漏洞扫描
+```
+
+### 后渗透测试
+
+在获得初始访问权限后，可以使用后渗透工具进行权限提升、横向移动和持久化：
+
+#### 1. Linux 权限提升枚举
+```
+使用 linpeas 对目标 Linux 系统进行权限提升检查
+```
+
+#### 2. Windows 权限提升枚举
+```
+使用 winpeas 对目标 Windows 系统进行权限提升检查
+```
+
+#### 3. Active Directory 攻击路径分析
+```
+使用 bloodhound 分析 Active Directory 的攻击路径
+```
+
+#### 4. 凭证提取
+```
+使用 mimikatz 提取 Windows 系统的凭证信息
+```
+
+#### 5. 横向移动
+```
+使用 impacket 工具集进行网络协议攻击和横向移动
+```
+
+#### 6. 后门生成
+```
+使用 msfvenom 生成反向 shell 载荷
+```
+
+### CTF 竞赛支持
+
+系统内置了丰富的 CTF 工具，支持各种 CTF 题型的解题：
+
+#### 1. 隐写分析
+```
+使用 stegsolve 分析图片隐写
+使用 zsteg 检测 LSB 隐写
+```
+
+#### 2. 密码破解
+```
+使用 hashcat 破解哈希值
+使用 john 破解密码文件
+使用 fcrackzip 破解 ZIP 文件密码
+使用 pdfcrack 破解 PDF 文件密码
+```
+
+#### 3. 二进制分析
+```
+使用 gdb 调试二进制文件
+使用 radare2 进行逆向分析
+使用 strings 提取二进制文件中的字符串
+```
+
+#### 4. 哈希识别
+```
+使用 hash-identifier 识别哈希类型
+```
+
+#### 5. 数据转换和分析
+```
+使用 cyberchef 进行各种数据转换和分析
+使用 xxd 查看文件十六进制内容
+```
+
+#### 6. 综合 CTF 解题
+```
+分析这个 CTF 题目：给定一个包含隐写和加密的文件，找出 flag
 ```
 
 ### 监控工具执行
@@ -571,7 +646,7 @@ curl -X POST http://localhost:8080/api/mcp \
 
 ### 工具概览
 
-当前系统集成了 **98+ 个安全工具**，涵盖以下类别：
+当前系统集成了 **上百个安全工具**，涵盖以下类别：
 
 - **网络扫描工具** - nmap, masscan, rustscan, arp-scan, nbtscan 等
 - **Web应用扫描** - sqlmap, nikto, dirb, gobuster, feroxbuster, ffuf, httpx 等
@@ -584,6 +659,8 @@ curl -X POST http://localhost:8080/api/mcp \
 - **漏洞利用** - metasploit, msfvenom, pwntools, ropper, ropgadget 等
 - **密码破解** - hashcat, john, hashpump 等
 - **取证分析** - volatility, volatility3, foremost, steghide, exiftool 等
+- **后渗透工具** - linpeas, winpeas, mimikatz, bloodhound, impacket, responder 等
+- **CTF工具** - stegsolve, zsteg, hash-identifier, fcrackzip, pdfcrack, cyberchef 等
 - **系统工具** - exec, create-file, delete-file, list-files, modify-file 等
 
 ### 主要工具示例
@@ -925,7 +1002,7 @@ CMD ["./cyberstrike-ai"]
 
 ### AI迭代机制
 
-- **最大迭代次数**：系统支持多轮AI迭代，确保复杂测试任务能够完成
+- **最大迭代次数**：系统支持最多30轮AI迭代，确保复杂测试任务能够完成
 - **智能总结**：当达到最大迭代次数时，AI会自动总结所有测试结果、发现的问题和已完成的工作
 - **下一步计划**：如果测试未完成，AI会提供详细的下一步执行计划，指导后续测试
 

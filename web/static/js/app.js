@@ -143,7 +143,7 @@ function collapseAllProgressDetails(assistantMessageId, progressId) {
             timeline.classList.remove('expanded');
             const btn = document.querySelector(`#${assistantMessageId} .process-detail-btn`);
             if (btn) {
-                btn.innerHTML = '<span>📋 过程详情</span>';
+                btn.innerHTML = '<span>展开详情</span>';
             }
         }
     }
@@ -271,19 +271,19 @@ function toggleProcessDetails(progressId, assistantMessageId) {
     if (content && timeline) {
         if (timeline.classList.contains('expanded')) {
             timeline.classList.remove('expanded');
-            if (btn) btn.innerHTML = '<span>📋 过程详情</span>';
+            if (btn) btn.innerHTML = '<span>展开详情</span>';
         } else {
             timeline.classList.add('expanded');
-            if (btn) btn.innerHTML = '<span>📋 收起详情</span>';
+            if (btn) btn.innerHTML = '<span>收起详情</span>';
         }
     } else if (timeline) {
         // 如果只有timeline，直接切换
         if (timeline.classList.contains('expanded')) {
             timeline.classList.remove('expanded');
-            if (btn) btn.innerHTML = '<span>📋 过程详情</span>';
+            if (btn) btn.innerHTML = '<span>展开详情</span>';
         } else {
             timeline.classList.add('expanded');
-            if (btn) btn.innerHTML = '<span>📋 收起详情</span>';
+            if (btn) btn.innerHTML = '<span>收起详情</span>';
         }
     }
     
@@ -613,32 +613,35 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null) {
     timeDiv.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     contentWrapper.appendChild(timeDiv);
     
-    // 如果有MCP执行ID，添加查看详情区域
-    if (mcpExecutionIds && Array.isArray(mcpExecutionIds) && mcpExecutionIds.length > 0 && role === 'assistant') {
+    // 如果有MCP执行ID或进度ID，添加查看详情区域（统一使用"渗透测试详情"样式）
+    if (role === 'assistant' && ((mcpExecutionIds && Array.isArray(mcpExecutionIds) && mcpExecutionIds.length > 0) || progressId)) {
         const mcpSection = document.createElement('div');
         mcpSection.className = 'mcp-call-section';
         
         const mcpLabel = document.createElement('div');
         mcpLabel.className = 'mcp-call-label';
-        mcpLabel.textContent = `工具调用 (${mcpExecutionIds.length})`;
+        mcpLabel.textContent = '📋 渗透测试详情';
         mcpSection.appendChild(mcpLabel);
         
         const buttonsContainer = document.createElement('div');
         buttonsContainer.className = 'mcp-call-buttons';
         
-        mcpExecutionIds.forEach((execId, index) => {
-            const detailBtn = document.createElement('button');
-            detailBtn.className = 'mcp-detail-btn';
-            detailBtn.innerHTML = `<span>调用 #${index + 1}</span>`;
-            detailBtn.onclick = () => showMCPDetail(execId);
-            buttonsContainer.appendChild(detailBtn);
-        });
+        // 如果有MCP执行ID，添加MCP调用详情按钮
+        if (mcpExecutionIds && Array.isArray(mcpExecutionIds) && mcpExecutionIds.length > 0) {
+            mcpExecutionIds.forEach((execId, index) => {
+                const detailBtn = document.createElement('button');
+                detailBtn.className = 'mcp-detail-btn';
+                detailBtn.innerHTML = `<span>调用 #${index + 1}</span>`;
+                detailBtn.onclick = () => showMCPDetail(execId);
+                buttonsContainer.appendChild(detailBtn);
+            });
+        }
         
-        // 如果有进度ID，添加过程详情按钮
+        // 如果有进度ID，添加展开详情按钮（统一使用"展开详情"文本）
         if (progressId) {
             const progressDetailBtn = document.createElement('button');
             progressDetailBtn.className = 'mcp-detail-btn process-detail-btn';
-            progressDetailBtn.innerHTML = `<span>📋 过程详情</span>`;
+            progressDetailBtn.innerHTML = '<span>展开详情</span>';
             progressDetailBtn.onclick = () => toggleProcessDetails(progressId, messageDiv.id);
             buttonsContainer.appendChild(progressDetailBtn);
             // 存储进度ID到消息元素
@@ -688,8 +691,11 @@ function renderProcessDetails(messageId, processDetails) {
     if (!mcpLabel && !buttonsContainer) {
         mcpLabel = document.createElement('div');
         mcpLabel.className = 'mcp-call-label';
-        mcpLabel.textContent = '过程详情';
+        mcpLabel.textContent = '📋 渗透测试详情';
         mcpSection.appendChild(mcpLabel);
+    } else if (mcpLabel && mcpLabel.textContent !== '📋 渗透测试详情') {
+        // 如果标签存在但不是统一格式，更新它
+        mcpLabel.textContent = '📋 渗透测试详情';
     }
     
     // 如果没有按钮容器，创建一个
@@ -704,7 +710,7 @@ function renderProcessDetails(messageId, processDetails) {
     if (!processDetailBtn) {
         processDetailBtn = document.createElement('button');
         processDetailBtn.className = 'mcp-detail-btn process-detail-btn';
-        processDetailBtn.innerHTML = '<span>📋 过程详情</span>';
+        processDetailBtn.innerHTML = '<span>展开详情</span>';
         processDetailBtn.onclick = () => toggleProcessDetails(null, messageId);
         buttonsContainer.appendChild(processDetailBtn);
     }
@@ -788,11 +794,14 @@ function removeMessage(id) {
     }
 }
 
-// 回车发送消息
-document.getElementById('chat-input').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
+// 回车发送消息，Shift+Enter 换行
+const chatInput = document.getElementById('chat-input');
+chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
         sendMessage();
     }
+    // Shift+Enter 允许默认行为（换行）
 });
 
 // 显示MCP调用详情
@@ -1121,6 +1130,12 @@ function updateActiveConversation() {
 document.addEventListener('DOMContentLoaded', function() {
     // 加载对话列表
     loadConversations();
+    
+    // 初始化 textarea 高度
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.style.height = '44px';
+    }
     
     // 添加欢迎消息
     addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');

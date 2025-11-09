@@ -14,6 +14,7 @@ type Config struct {
 	Log      LogConfig      `yaml:"log"`
 	MCP      MCPConfig      `yaml:"mcp"`
 	OpenAI   OpenAIConfig   `yaml:"openai"`
+	Agent    AgentConfig    `yaml:"agent"`
 	Security SecurityConfig `yaml:"security"`
 	Database DatabaseConfig `yaml:"database"`
 }
@@ -47,6 +48,10 @@ type SecurityConfig struct {
 
 type DatabaseConfig struct {
 	Path string `yaml:"path"`
+}
+
+type AgentConfig struct {
+	MaxIterations int `yaml:"max_iterations"`
 }
 
 type ToolConfig struct {
@@ -199,6 +204,9 @@ func Default() *Config {
 		OpenAI: OpenAIConfig{
 			BaseURL: "https://api.openai.com/v1",
 			Model:   "gpt-4",
+		},
+		Agent: AgentConfig{
+			MaxIterations: 30, // 默认最大迭代次数
 		},
 		Security: SecurityConfig{
 			Tools:    []ToolConfig{}, // 工具配置应该从 config.yaml 或 tools/ 目录加载

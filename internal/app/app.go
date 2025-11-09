@@ -63,7 +63,11 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 	executor.RegisterTools(mcpServer)
 
 	// 创建Agent
-	agent := agent.NewAgent(&cfg.OpenAI, mcpServer, log.Logger)
+	maxIterations := cfg.Agent.MaxIterations
+	if maxIterations <= 0 {
+		maxIterations = 30 // 默认值
+	}
+	agent := agent.NewAgent(&cfg.OpenAI, mcpServer, log.Logger, maxIterations)
 
 	// 创建处理器
 	agentHandler := handler.NewAgentHandler(agent, db, log.Logger)

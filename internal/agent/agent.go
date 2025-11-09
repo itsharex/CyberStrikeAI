@@ -17,19 +17,25 @@ import (
 
 // Agent AI代理
 type Agent struct {
-	openAIClient *http.Client
-	config       *config.OpenAIConfig
-	mcpServer    *mcp.Server
-	logger       *zap.Logger
+	openAIClient  *http.Client
+	config        *config.OpenAIConfig
+	mcpServer     *mcp.Server
+	logger        *zap.Logger
+	maxIterations int
 }
 
 // NewAgent 创建新的Agent
-func NewAgent(cfg *config.OpenAIConfig, mcpServer *mcp.Server, logger *zap.Logger) *Agent {
+func NewAgent(cfg *config.OpenAIConfig, mcpServer *mcp.Server, logger *zap.Logger, maxIterations int) *Agent {
+	// 如果 maxIterations 为 0 或负数，使用默认值 30
+	if maxIterations <= 0 {
+		maxIterations = 30
+	}
 	return &Agent{
-		openAIClient: &http.Client{Timeout: 5 * time.Minute},
-		config:       cfg,
-		mcpServer:    mcpServer,
-		logger:       logger,
+		openAIClient:  &http.Client{Timeout: 5 * time.Minute},
+		config:        cfg,
+		mcpServer:     mcpServer,
+		logger:        logger,
+		maxIterations: maxIterations,
 	}
 }
 
@@ -271,7 +277,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 		MCPExecutionIDs: make([]string, 0),
 	}
 
-	maxIterations := 30
+	maxIterations := a.maxIterations
 	for i := 0; i < maxIterations; i++ {
 		// 检查是否是最后一次迭代
 		isLastIteration := (i == maxIterations-1)
@@ -527,7 +533,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 	sendProgress("progress", "达到最大迭代次数，正在生成总结...", nil)
 	finalSummaryPrompt := ChatMessage{
 		Role:    "user",
-		Content: "已达到最大迭代次数（30轮）。请总结到目前为止的所有测试结果、发现的问题和已完成的工作。如果需要继续测试，请提供详细的下一步执行计划。请直接回复，不要调用工具。",
+		Content: fmt.Sprintf("已达到最大迭代次数（%d轮）。请总结到目前为止的所有测试结果、发现的问题和已完成的工作。如果需要继续测试，请提供详细的下一步执行计划。请直接回复，不要调用工具。", a.maxIterations),
 	}
 	messages = append(messages, finalSummaryPrompt)
 	
@@ -542,7 +548,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 	}
 	
 	// 如果无法生成总结，返回友好的提示
-	result.Response = "已达到最大迭代次数（30轮）。系统已执行了多轮测试，但由于达到迭代上限，无法继续自动执行。建议您查看已执行的工具结果，或提出新的测试请求以继续测试。"
+	result.Response = fmt.Sprintf("已达到最大迭代次数（%d轮）。系统已执行了多轮测试，但由于达到迭代上限，无法继续自动执行。建议您查看已执行的工具结果，或提出新的测试请求以继续测试。", a.maxIterations)
 	return result, nil
 }
 
