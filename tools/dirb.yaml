@@ -83,4 +83,23 @@ parameters:
     required: false
     flag: "-w"
     format: "flag"
+  
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的Dirb参数。用于传递未在参数列表中定义的Dirb选项。
+      
+      **示例值：**
+      - "-a": 用户代理字符串
+      - "-H": 自定义HTTP头
+      - "-c": Cookie字符串
+      - "-X": 文件扩展名
+      - "-z": 毫秒延迟
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
 

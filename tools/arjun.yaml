@@ -57,4 +57,21 @@ parameters:
     flag: "--stable"
     format: "flag"
     default: false
+  
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的Arjun参数。用于传递未在参数列表中定义的Arjun选项。
+      
+      **示例值：**
+      - "-o output.txt": 输出到文件
+      - "-q": 安静模式
+      - "-i": 从文件读取URL
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
 

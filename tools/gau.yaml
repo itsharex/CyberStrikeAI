@@ -41,4 +41,21 @@ parameters:
     flag: "-subs"
     format: "flag"
     default: true
+  
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的Gau参数。用于传递未在参数列表中定义的Gau选项。
+      
+      **示例值：**
+      - "-o output.txt": 输出到文件
+      - "-t": 线程数
+      - "-b": 黑名单扩展
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
 

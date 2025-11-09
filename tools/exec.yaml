@@ -100,3 +100,17 @@ parameters:
       - 相对路径相对于程序运行目录
     required: false
 
+  - name: "additional_args"
+    type: "string"
+    description: |
+      额外的exec参数。用于传递未在参数列表中定义的exec选项。
+      
+      **示例值：**
+      - 根据工具特性添加常用参数示例
+      
+      **注意事项：**
+      - 多个参数用空格分隔
+      - 确保参数格式正确，避免命令注入
+      - 此参数会直接追加到命令末尾
+    required: false
+    format: "positional"
