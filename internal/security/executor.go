@@ -201,8 +201,21 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 
 	// 如果配置中定义了参数映射，使用配置中的映射规则
 	if len(toolConfig.Parameters) > 0 {
-		// 先添加固定参数
-		cmdArgs = append(cmdArgs, toolConfig.Args...)
+		// 检查是否有 scan_type 参数，如果有则替换默认的扫描类型参数
+		hasScanType := false
+		var scanTypeValue string
+		if scanType, ok := args["scan_type"].(string); ok && scanType != "" {
+			hasScanType = true
+			scanTypeValue = scanType
+		}
+		
+		// 添加固定参数（如果指定了 scan_type，可能需要过滤掉默认的扫描类型参数）
+		if hasScanType && toolName == "nmap" {
+			// 对于 nmap，如果指定了 scan_type，跳过默认的 -sT -sV -sC
+			// 这些参数会被 scan_type 参数替换
+		} else {
+			cmdArgs = append(cmdArgs, toolConfig.Args...)
+		}
 
 		// 按位置参数排序
 		positionalParams := make([]config.ParameterConfig, 0)
@@ -219,6 +232,11 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 		// 对位置参数按位置排序
 		for i := 0; i < len(positionalParams); i++ {
 			for _, param := range positionalParams {
+				// 跳过特殊参数，它们会在后面单独处理
+				if param.Name == "additional_args" || param.Name == "scan_type" {
+					continue
+				}
+				
 				if param.Position != nil && *param.Position == i {
 					value := e.getParamValue(args, param)
 					if value == nil {
@@ -241,6 +259,11 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 
 		// 处理标志参数
 		for _, param := range flagParams {
+			// 跳过特殊参数，它们会在后面单独处理
+			if param.Name == "additional_args" || param.Name == "scan_type" {
+				continue
+			}
+			
 			value := e.getParamValue(args, param)
 			if value == nil {
 				if param.Required {
@@ -333,6 +356,37 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 				cmdArgs = append(cmdArgs, e.formatParamValue(param, value))
 			}
 		}
+		
+		// 特殊处理：additional_args 参数（需要按空格分割成多个参数）
+		if additionalArgs, ok := args["additional_args"].(string); ok && additionalArgs != "" {
+			// 按空格分割，但保留引号内的内容
+			additionalArgsList := e.parseAdditionalArgs(additionalArgs)
+			cmdArgs = append(cmdArgs, additionalArgsList...)
+		}
+		
+		// 特殊处理：scan_type 参数（需要按空格分割并插入到合适位置）
+		if hasScanType {
+			scanTypeArgs := e.parseAdditionalArgs(scanTypeValue)
+			if len(scanTypeArgs) > 0 {
+				// 对于 nmap，scan_type 应该替换默认的扫描类型参数
+				// 由于我们已经跳过了默认的 args，现在需要将 scan_type 插入到合适位置
+				// 找到 target 参数的位置（通常是最后一个位置参数）
+				insertPos := len(cmdArgs)
+				for i := len(cmdArgs) - 1; i >= 0; i-- {
+					// target 通常是最后一个非标志参数
+					if !strings.HasPrefix(cmdArgs[i], "-") {
+						insertPos = i
+						break
+					}
+				}
+				// 在 target 之前插入 scan_type 参数
+				newArgs := make([]string, 0, len(cmdArgs)+len(scanTypeArgs))
+				newArgs = append(newArgs, cmdArgs[:insertPos]...)
+				newArgs = append(newArgs, scanTypeArgs...)
+				newArgs = append(newArgs, cmdArgs[insertPos:]...)
+				cmdArgs = newArgs
+			}
+		}
 
 		return cmdArgs
 	}
@@ -356,6 +410,78 @@ func (e *Executor) buildCommandArgs(toolName string, toolConfig *config.ToolConf
 	}
 
 	return cmdArgs
+}
+
+// parseAdditionalArgs 解析 additional_args 字符串，按空格分割但保留引号内的内容
+func (e *Executor) parseAdditionalArgs(argsStr string) []string {
+	if argsStr == "" {
+		return []string{}
+	}
+	
+	result := make([]string, 0)
+	var current strings.Builder
+	inQuotes := false
+	var quoteChar rune
+	escapeNext := false
+	
+	runes := []rune(argsStr)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		
+		if escapeNext {
+			current.WriteRune(r)
+			escapeNext = false
+			continue
+		}
+		
+		if r == '\\' {
+			// 检查下一个字符是否是引号
+			if i+1 < len(runes) && (runes[i+1] == '"' || runes[i+1] == '\'') {
+				// 转义的引号：跳过反斜杠，将引号作为普通字符写入
+				i++
+				current.WriteRune(runes[i])
+			} else {
+				// 其他转义字符：写入反斜杠，下一个字符会在下次迭代处理
+				escapeNext = true
+				current.WriteRune(r)
+			}
+			continue
+		}
+		
+		if !inQuotes && (r == '"' || r == '\'') {
+			inQuotes = true
+			quoteChar = r
+			continue
+		}
+		
+		if inQuotes && r == quoteChar {
+			inQuotes = false
+			quoteChar = 0
+			continue
+		}
+		
+		if !inQuotes && (r == ' ' || r == '\t' || r == '\n') {
+			if current.Len() > 0 {
+				result = append(result, current.String())
+				current.Reset()
+			}
+			continue
+		}
+		
+		current.WriteRune(r)
+	}
+	
+	// 处理最后一个参数（如果存在）
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+	
+	// 如果解析结果为空，使用简单的空格分割作为降级方案
+	if len(result) == 0 {
+		result = strings.Fields(argsStr)
+	}
+	
+	return result
 }
 
 // getParamValue 获取参数值，支持默认值
@@ -672,4 +798,5 @@ func (e *Executor) GetVulnerabilityReport(vulnerabilities []Vulnerability) map[s
 		"generatedAt":     time.Now(),
 	}
 }
+
 
