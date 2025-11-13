@@ -1,7 +1,5 @@
 # CyberStrikeAI
 
-[English](README.md) | [中文](README_CN.md) 
-
 🚀 **AI自主渗透测试平台** - 基于Golang构建，内置上百个安全工具，支持灵活扩展自定义工具，通过MCP协议实现AI智能决策与自动化执行，让安全测试像对话一样简单。
 - web模式
   ![详情预览](./img/效果.png)
@@ -631,6 +629,30 @@ CyberStrikeAI 支持两种 MCP 传输模式：
 - 适用于 Web 应用和其他 HTTP 客户端
 - 默认监听地址：`0.0.0.0:8081/mcp`
 - 可通过 `/api/mcp` 端点访问
+
+#### MCP HTTP 模式（IDE 集成）
+
+可将 Cursor、Claude Desktop 等 IDE 直接连接到内置的 HTTP MCP 服务：
+
+1. 确认 `config.yaml` 中 `mcp.enabled: true`，根据需要调整 `host` / `port`。
+2. 启动主服务（`./run.sh` 或 `go run cmd/server/main.go`），MCP 端点将暴露在 `http://<host>:<port>/mcp`（本地运行时推荐使用 `http://127.0.0.1:8081/mcp`）。
+3. 在 Cursor 中打开 **Settings → Tools & MCP → Add Custom MCP**，选择 HTTP，填写：
+   - `Base URL`: `http://127.0.0.1:8081/mcp`
+   - 如启用了鉴权，可在 Headers 中添加 `Authorization` 等字段。
+4. 或者在项目根目录创建 `.cursor/mcp.json`：
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai-http": {
+         "transport": "http",
+         "url": "http://127.0.0.1:8081/mcp"
+       }
+     }
+   }
+   ```
+5. 重启 IDE 后即可在 MCP 工具列表中看到 CyberStrikeAI 的工具集。
+
+> 🔐 **安全提示**：若将 MCP HTTP 端口开放给外部，请结合防火墙或认证机制，避免被未授权访问。
 
 #### 2. stdio 模式（新增）
 - 通过标准输入输出（stdio）进行通信

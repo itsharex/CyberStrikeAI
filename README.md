@@ -631,6 +631,30 @@ CyberStrikeAI supports two MCP transport modes:
 - Default listen address: `0.0.0.0:8081/mcp`
 - Accessible via `/api/mcp` endpoint
 
+#### MCP HTTP Mode (IDE Integration)
+
+You can connect IDEs such as Cursor or Claude Desktop directly to the built-in HTTP MCP server:
+
+1. Ensure `mcp.enabled: true` in `config.yaml`, adjust `host`/`port` if you need a different bind address.
+2. Start the main server (`./run.sh` or `go run cmd/server/main.go`). The MCP endpoint will be available at `http://<host>:<port>/mcp` (default `http://127.0.0.1:8081/mcp` when running locally).
+3. In Cursor, open **Settings → Tools & MCP → Add Custom MCP**, choose HTTP, and set:
+   - `Base URL`: `http://127.0.0.1:8081/mcp`
+   - Optional headers (e.g., `Authorization`) if you enforce authentication in front of MCP.
+4. Alternatively create `.cursor/mcp.json` in your project:
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai-http": {
+         "transport": "http",
+         "url": "http://127.0.0.1:8081/mcp"
+       }
+     }
+   }
+   ```
+5. Restart the IDE; CyberStrikeAI’s tools will appear under the MCP tool list.
+
+> 🔐 **Security tip**: if you expose the MCP HTTP port beyond localhost, protect it with firewalls or authentication to prevent misuse.
+
 #### 2. stdio Mode (New)
 - Communication via standard input/output (stdio)
 - Suitable for Cursor, Claude Desktop, and other IDE integrations
