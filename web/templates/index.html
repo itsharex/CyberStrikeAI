@@ -7,6 +7,23 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <div id="login-overlay" class="login-overlay" style="display: none;">
+        <div class="login-card">
+            <div class="login-header">
+                <h2>登录 CyberStrike</h2>
+                <p class="login-subtitle">请输入配置中的访问密码</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="login-password">密码</label>
+                    <input type="password" id="login-password" placeholder="输入登录密码" required autocomplete="current-password" />
+                </div>
+                <div id="login-error" class="login-error" role="alert" style="display: none;"></div>
+                <button type="submit" class="btn-primary login-submit">登录</button>
+            </form>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <div class="header-content">
@@ -104,6 +121,30 @@
                             <label for="agent-max-iterations">最大迭代次数</label>
                             <input type="number" id="agent-max-iterations" min="1" max="100" placeholder="30" />
                         </div>
+                    </div>
+                </div>
+
+                <!-- 安全设置 -->
+                <div class="settings-section">
+                    <h3>安全设置</h3>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label for="auth-current-password">当前密码</label>
+                            <input type="password" id="auth-current-password" placeholder="输入当前登录密码" autocomplete="current-password" />
+                        </div>
+                        <div class="form-group">
+                            <label for="auth-new-password">新密码</label>
+                            <input type="password" id="auth-new-password" placeholder="设置新密码（至少 8 位）" autocomplete="new-password" />
+                        </div>
+                        <div class="form-group">
+                            <label for="auth-confirm-password">确认新密码</label>
+                            <input type="password" id="auth-confirm-password" placeholder="再次输入新密码" autocomplete="new-password" />
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-secondary" type="button" onclick="resetPasswordForm()">清空</button>
+                            <button class="btn-primary change-password-submit" type="button" onclick="changePassword()">修改密码</button>
+                        </div>
+                        <p class="password-hint">修改密码后，需要使用新密码重新登录。</p>
                     </div>
                 </div>
             </div>

@@ -27,6 +27,7 @@ type App struct {
 	agent     *agent.Agent
 	executor  *security.Executor
 	db        *database.DB
+	auth      *security.AuthManager
 }
 
 // New 创建新应用
@@ -36,6 +37,12 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 
 	// CORS中间件
 	router.Use(corsMiddleware())
+
+	// 认证管理器
+	authManager, err := security.NewAuthManager(cfg.Auth.Password, cfg.Auth.SessionDurationHours)
+	if err != nil {
+		return nil, fmt.Errorf("初始化认证失败: %w", err)
+	}
 
 	// 初始化数据库
 	dbPath := cfg.Database.Path
@@ -62,6 +69,13 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 	// 注册工具
 	executor.RegisterTools(mcpServer)
 
+	if cfg.Auth.GeneratedPassword != "" {
+		config.PrintGeneratedPasswordWarning(cfg.Auth.GeneratedPassword, cfg.Auth.GeneratedPasswordPersisted, cfg.Auth.GeneratedPasswordPersistErr)
+		cfg.Auth.GeneratedPassword = ""
+		cfg.Auth.GeneratedPasswordPersisted = false
+		cfg.Auth.GeneratedPasswordPersistErr = ""
+	}
+
 	// 创建Agent
 	maxIterations := cfg.Agent.MaxIterations
 	if maxIterations <= 0 {
@@ -69,20 +83,30 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 	}
 	agent := agent.NewAgent(&cfg.OpenAI, mcpServer, log.Logger, maxIterations)
 
-	// 创建处理器
-	agentHandler := handler.NewAgentHandler(agent, db, log.Logger)
-	monitorHandler := handler.NewMonitorHandler(mcpServer, executor, log.Logger)
-	conversationHandler := handler.NewConversationHandler(db, log.Logger)
-	
 	// 获取配置文件路径
 	configPath := "config.yaml"
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
 	}
+
+	// 创建处理器
+	agentHandler := handler.NewAgentHandler(agent, db, log.Logger)
+	monitorHandler := handler.NewMonitorHandler(mcpServer, executor, log.Logger)
+	conversationHandler := handler.NewConversationHandler(db, log.Logger)
+	authHandler := handler.NewAuthHandler(authManager, cfg, configPath, log.Logger)
 	configHandler := handler.NewConfigHandler(configPath, cfg, mcpServer, executor, agent, log.Logger)
 
 	// 设置路由
-	setupRoutes(router, agentHandler, monitorHandler, conversationHandler, configHandler, mcpServer)
+	setupRoutes(
+		router,
+		authHandler,
+		agentHandler,
+		monitorHandler,
+		conversationHandler,
+		configHandler,
+		mcpServer,
+		authManager,
+	)
 
 	return &App{
 		config:    cfg,
@@ -92,6 +116,7 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 		agent:     agent,
 		executor:  executor,
 		db:        db,
+		auth:      authManager,
 	}, nil
 }
 
@@ -120,37 +145,58 @@ func (a *App) Run() error {
 }
 
 // setupRoutes 设置路由
-func setupRoutes(router *gin.Engine, agentHandler *handler.AgentHandler, monitorHandler *handler.MonitorHandler, conversationHandler *handler.ConversationHandler, configHandler *handler.ConfigHandler, mcpServer *mcp.Server) {
+func setupRoutes(
+	router *gin.Engine,
+	authHandler *handler.AuthHandler,
+	agentHandler *handler.AgentHandler,
+	monitorHandler *handler.MonitorHandler,
+	conversationHandler *handler.ConversationHandler,
+	configHandler *handler.ConfigHandler,
+	mcpServer *mcp.Server,
+	authManager *security.AuthManager,
+) {
 	// API路由
 	api := router.Group("/api")
+
+	// 认证相关路由
+	authRoutes := api.Group("/auth")
+	{
+		authRoutes.POST("/login", authHandler.Login)
+		authRoutes.POST("/logout", security.AuthMiddleware(authManager), authHandler.Logout)
+		authRoutes.POST("/change-password", security.AuthMiddleware(authManager), authHandler.ChangePassword)
+		authRoutes.GET("/validate", security.AuthMiddleware(authManager), authHandler.Validate)
+	}
+
+	protected := api.Group("")
+	protected.Use(security.AuthMiddleware(authManager))
 	{
 		// Agent Loop
-		api.POST("/agent-loop", agentHandler.AgentLoop)
+		protected.POST("/agent-loop", agentHandler.AgentLoop)
 		// Agent Loop 流式输出
-		api.POST("/agent-loop/stream", agentHandler.AgentLoopStream)
+		protected.POST("/agent-loop/stream", agentHandler.AgentLoopStream)
 		// Agent Loop 取消与任务列表
-		api.POST("/agent-loop/cancel", agentHandler.CancelAgentLoop)
-		api.GET("/agent-loop/tasks", agentHandler.ListAgentTasks)
+		protected.POST("/agent-loop/cancel", agentHandler.CancelAgentLoop)
+		protected.GET("/agent-loop/tasks", agentHandler.ListAgentTasks)
 
 		// 对话历史
-		api.POST("/conversations", conversationHandler.CreateConversation)
-		api.GET("/conversations", conversationHandler.ListConversations)
-		api.GET("/conversations/:id", conversationHandler.GetConversation)
-		api.DELETE("/conversations/:id", conversationHandler.DeleteConversation)
+		protected.POST("/conversations", conversationHandler.CreateConversation)
+		protected.GET("/conversations", conversationHandler.ListConversations)
+		protected.GET("/conversations/:id", conversationHandler.GetConversation)
+		protected.DELETE("/conversations/:id", conversationHandler.DeleteConversation)
 
 		// 监控
-		api.GET("/monitor", monitorHandler.Monitor)
-		api.GET("/monitor/execution/:id", monitorHandler.GetExecution)
-		api.GET("/monitor/stats", monitorHandler.GetStats)
-		api.GET("/monitor/vulnerabilities", monitorHandler.GetVulnerabilities)
+		protected.GET("/monitor", monitorHandler.Monitor)
+		protected.GET("/monitor/execution/:id", monitorHandler.GetExecution)
+		protected.GET("/monitor/stats", monitorHandler.GetStats)
+		protected.GET("/monitor/vulnerabilities", monitorHandler.GetVulnerabilities)
 
 		// 配置管理
-		api.GET("/config", configHandler.GetConfig)
-		api.PUT("/config", configHandler.UpdateConfig)
-		api.POST("/config/apply", configHandler.ApplyConfig)
+		protected.GET("/config", configHandler.GetConfig)
+		protected.PUT("/config", configHandler.UpdateConfig)
+		protected.POST("/config/apply", configHandler.ApplyConfig)
 
 		// MCP端点
-		api.POST("/mcp", func(c *gin.Context) {
+		protected.POST("/mcp", func(c *gin.Context) {
 			mcpServer.HandleHTTP(c.Writer, c.Request)
 		})
 	}

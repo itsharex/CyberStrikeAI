@@ -1,3 +1,9 @@
+const AUTH_STORAGE_KEY = 'cyberstrike-auth';
+let authToken = null;
+let authTokenExpiry = null;
+let authPromise = null;
+let authPromiseResolvers = [];
+let isAppInitialized = false;
 
 // 当前对话ID
 let currentConversationId = null;
@@ -6,6 +12,280 @@ const progressTaskState = new Map();
 // 活跃任务刷新定时器
 let activeTaskInterval = null;
 const ACTIVE_TASK_REFRESH_INTERVAL = 10000; // 10秒检查一次，提供更实时的任务状态反馈
+
+function isTokenValid() {
+    return !!authToken && authTokenExpiry instanceof Date && authTokenExpiry.getTime() > Date.now();
+}
+
+function saveAuth(token, expiresAt) {
+    const expiry = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+    authToken = token;
+    authTokenExpiry = expiry;
+    try {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+            token,
+            expiresAt: expiry.toISOString(),
+        }));
+    } catch (error) {
+        console.warn('无法持久化认证信息:', error);
+    }
+}
+
+function clearAuthStorage() {
+    authToken = null;
+    authTokenExpiry = null;
+    try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (error) {
+        console.warn('无法清除认证信息:', error);
+    }
+}
+
+function loadAuthFromStorage() {
+    try {
+        const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (!raw) {
+            return false;
+        }
+        const stored = JSON.parse(raw);
+        if (!stored.token || !stored.expiresAt) {
+            clearAuthStorage();
+            return false;
+        }
+        const expiry = new Date(stored.expiresAt);
+        if (Number.isNaN(expiry.getTime())) {
+            clearAuthStorage();
+            return false;
+        }
+        authToken = stored.token;
+        authTokenExpiry = expiry;
+        return isTokenValid();
+    } catch (error) {
+        console.error('读取认证信息失败:', error);
+        clearAuthStorage();
+        return false;
+    }
+}
+
+function resolveAuthPromises(success) {
+    authPromiseResolvers.forEach(resolve => resolve(success));
+    authPromiseResolvers = [];
+    authPromise = null;
+}
+
+function showLoginOverlay(message = '') {
+    const overlay = document.getElementById('login-overlay');
+    const errorBox = document.getElementById('login-error');
+    const passwordInput = document.getElementById('login-password');
+    if (!overlay) {
+        return;
+    }
+    overlay.style.display = 'flex';
+    if (errorBox) {
+        if (message) {
+            errorBox.textContent = message;
+            errorBox.style.display = 'block';
+        } else {
+            errorBox.textContent = '';
+            errorBox.style.display = 'none';
+        }
+    }
+    setTimeout(() => {
+        if (passwordInput) {
+            passwordInput.focus();
+        }
+    }, 100);
+}
+
+function hideLoginOverlay() {
+    const overlay = document.getElementById('login-overlay');
+    const errorBox = document.getElementById('login-error');
+    const passwordInput = document.getElementById('login-password');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+    if (errorBox) {
+        errorBox.textContent = '';
+        errorBox.style.display = 'none';
+    }
+    if (passwordInput) {
+        passwordInput.value = '';
+    }
+}
+
+function ensureAuthPromise() {
+    if (!authPromise) {
+        authPromise = new Promise(resolve => {
+            authPromiseResolvers.push(resolve);
+        });
+    }
+    return authPromise;
+}
+
+async function ensureAuthenticated() {
+    if (isTokenValid()) {
+        return true;
+    }
+    showLoginOverlay();
+    await ensureAuthPromise();
+    return true;
+}
+
+function handleUnauthorized({ message = '认证已过期，请重新登录', silent = false } = {}) {
+    clearAuthStorage();
+    authPromise = null;
+    authPromiseResolvers = [];
+    if (!silent) {
+        showLoginOverlay(message);
+    } else {
+        showLoginOverlay();
+    }
+    return false;
+}
+
+async function apiFetch(url, options = {}) {
+    await ensureAuthenticated();
+    const opts = { ...options };
+    const headers = new Headers(options && options.headers ? options.headers : undefined);
+    if (authToken && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${authToken}`);
+    }
+    opts.headers = headers;
+
+    const response = await fetch(url, opts);
+    if (response.status === 401) {
+        handleUnauthorized();
+        throw new Error('未授权访问');
+    }
+    return response;
+}
+
+async function submitLogin(event) {
+    event.preventDefault();
+    const passwordInput = document.getElementById('login-password');
+    const errorBox = document.getElementById('login-error');
+    const submitBtn = document.querySelector('.login-submit');
+
+    if (!passwordInput) {
+        return;
+    }
+
+    const password = passwordInput.value.trim();
+    if (!password) {
+        if (errorBox) {
+            errorBox.textContent = '请输入密码';
+            errorBox.style.display = 'block';
+        }
+        return;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+    }
+
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ password }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.token) {
+            if (errorBox) {
+                errorBox.textContent = result.error || '登录失败，请检查密码';
+                errorBox.style.display = 'block';
+            }
+            return;
+        }
+
+        saveAuth(result.token, result.expires_at);
+        hideLoginOverlay();
+        resolveAuthPromises(true);
+        if (!isAppInitialized) {
+            await bootstrapApp();
+        } else {
+            await refreshAppData();
+        }
+    } catch (error) {
+        console.error('登录失败:', error);
+        if (errorBox) {
+            errorBox.textContent = '登录失败，请稍后重试';
+            errorBox.style.display = 'block';
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+async function refreshAppData(showTaskErrors = false) {
+    await Promise.allSettled([
+        loadConversations(),
+        loadActiveTasks(showTaskErrors),
+    ]);
+}
+
+async function bootstrapApp() {
+    if (!isAppInitialized) {
+        initializeChatUI();
+        isAppInitialized = true;
+    }
+    await refreshAppData();
+}
+
+function initializeChatUI() {
+    const chatInputEl = document.getElementById('chat-input');
+    if (chatInputEl) {
+        chatInputEl.style.height = '44px';
+    }
+
+    const messagesDiv = document.getElementById('chat-messages');
+    if (messagesDiv && messagesDiv.childElementCount === 0) {
+        addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');
+    }
+
+    loadActiveTasks(true);
+    if (activeTaskInterval) {
+        clearInterval(activeTaskInterval);
+    }
+    activeTaskInterval = setInterval(() => loadActiveTasks(), ACTIVE_TASK_REFRESH_INTERVAL);
+}
+
+function setupLoginUI() {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', submitLogin);
+    }
+}
+
+async function initializeApp() {
+    setupLoginUI();
+    const hasStoredAuth = loadAuthFromStorage();
+    if (hasStoredAuth && isTokenValid()) {
+        try {
+            const response = await apiFetch('/api/auth/validate', {
+                method: 'GET',
+            });
+            if (response.ok) {
+                hideLoginOverlay();
+                resolveAuthPromises(true);
+                await bootstrapApp();
+                return;
+            }
+        } catch (error) {
+            console.warn('本地会话已失效，需重新登录');
+        }
+    }
+
+    clearAuthStorage();
+    showLoginOverlay();
+}
+
+document.addEventListener('DOMContentLoaded', initializeApp);
+
 
 function registerProgressTask(progressId, conversationId = null) {
     const state = progressTaskState.get(progressId) || {};
@@ -45,7 +325,7 @@ function finalizeProgressTask(progressId, finalLabel = '已完成') {
 }
 
 async function requestCancel(conversationId) {
-    const response = await fetch('/api/agent-loop/cancel', {
+    const response = await apiFetch('/api/agent-loop/cancel', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -81,7 +361,7 @@ async function sendMessage() {
     let mcpExecutionIds = [];
     
     try {
-        const response = await fetch('/api/agent-loop/stream', {
+        const response = await apiFetch('/api/agent-loop/stream', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -950,7 +1230,7 @@ chatInput.addEventListener('keydown', function(e) {
 // 显示MCP调用详情
 async function showMCPDetail(executionId) {
     try {
-        const response = await fetch(`/api/monitor/execution/${executionId}`);
+        const response = await apiFetch(`/api/monitor/execution/${executionId}`);
         const exec = await response.json();
         
         if (response.ok) {
@@ -1064,7 +1344,7 @@ function startNewConversation() {
 // 加载对话列表
 async function loadConversations() {
     try {
-        const response = await fetch('/api/conversations?limit=50');
+        const response = await apiFetch('/api/conversations?limit=50');
         const conversations = await response.json();
         
         const listContainer = document.getElementById('conversations-list');
@@ -1179,7 +1459,7 @@ async function loadConversations() {
 // 加载对话
 async function loadConversation(conversationId) {
     try {
-        const response = await fetch(`/api/conversations/${conversationId}`);
+        const response = await apiFetch(`/api/conversations/${conversationId}`);
         const conversation = await response.json();
         
         if (!response.ok) {
@@ -1230,7 +1510,7 @@ async function deleteConversation(conversationId) {
     }
     
     try {
-        const response = await fetch(`/api/conversations/${conversationId}`, {
+        const response = await apiFetch(`/api/conversations/${conversationId}`, {
             method: 'DELETE'
         });
         
@@ -1268,7 +1548,7 @@ function updateActiveConversation() {
 async function loadActiveTasks(showErrors = false) {
     const bar = document.getElementById('active-tasks-bar');
     try {
-        const response = await fetch('/api/agent-loop/tasks');
+        const response = await apiFetch('/api/agent-loop/tasks');
         const result = await response.json().catch(() => ({}));
 
         if (!response.ok) {
@@ -1386,7 +1666,7 @@ window.onclick = function(event) {
 // 加载配置
 async function loadConfig() {
     try {
-        const response = await fetch('/api/config');
+        const response = await apiFetch('/api/config');
         if (!response.ok) {
             throw new Error('获取配置失败');
         }
@@ -1520,7 +1800,7 @@ async function applySettings() {
         });
         
         // 更新配置
-        const updateResponse = await fetch('/api/config', {
+        const updateResponse = await apiFetch('/api/config', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -1534,7 +1814,7 @@ async function applySettings() {
         }
         
         // 应用配置
-        const applyResponse = await fetch('/api/config/apply', {
+        const applyResponse = await apiFetch('/api/config/apply', {
             method: 'POST'
         });
         
@@ -1551,24 +1831,85 @@ async function applySettings() {
     }
 }
 
-// 页面加载时初始化
-document.addEventListener('DOMContentLoaded', function() {
-    // 加载对话列表
-    loadConversations();
-    
-    // 初始化 textarea 高度
-    const chatInput = document.getElementById('chat-input');
-    if (chatInput) {
-        chatInput.style.height = '44px';
+function resetPasswordForm() {
+    const currentInput = document.getElementById('auth-current-password');
+    const newInput = document.getElementById('auth-new-password');
+    const confirmInput = document.getElementById('auth-confirm-password');
+
+    [currentInput, newInput, confirmInput].forEach(input => {
+        if (input) {
+            input.value = '';
+            input.classList.remove('error');
+        }
+    });
+}
+
+async function changePassword() {
+    const currentInput = document.getElementById('auth-current-password');
+    const newInput = document.getElementById('auth-new-password');
+    const confirmInput = document.getElementById('auth-confirm-password');
+    const submitBtn = document.querySelector('.change-password-submit');
+
+    [currentInput, newInput, confirmInput].forEach(input => input && input.classList.remove('error'));
+
+    const currentPassword = currentInput?.value.trim() || '';
+    const newPassword = newInput?.value.trim() || '';
+    const confirmPassword = confirmInput?.value.trim() || '';
+
+    let hasError = false;
+
+    if (!currentPassword) {
+        currentInput?.classList.add('error');
+        hasError = true;
     }
-    
-    // 添加欢迎消息
-    addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');
-    
-    loadActiveTasks(true);
-    if (activeTaskInterval) {
-        clearInterval(activeTaskInterval);
+
+    if (!newPassword || newPassword.length < 8) {
+        newInput?.classList.add('error');
+        hasError = true;
     }
-    activeTaskInterval = setInterval(() => loadActiveTasks(), ACTIVE_TASK_REFRESH_INTERVAL);
-});
+
+    if (newPassword !== confirmPassword) {
+        confirmInput?.classList.add('error');
+        hasError = true;
+    }
+
+    if (hasError) {
+        alert('请正确填写当前密码和新密码，新密码至少 8 位且需要两次输入一致。');
+        return;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+    }
+
+    try {
+        const response = await apiFetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                oldPassword: currentPassword,
+                newPassword: newPassword
+            })
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.error || '修改密码失败');
+        }
+
+        alert('密码已更新，请使用新密码重新登录。');
+        resetPasswordForm();
+        handleUnauthorized({ message: '密码已更新，请使用新密码重新登录。', silent: false });
+        closeSettings();
+    } catch (error) {
+        console.error('修改密码失败:', error);
+        alert('修改密码失败: ' + error.message);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+        }
+    }
+}
 

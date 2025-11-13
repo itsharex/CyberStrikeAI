@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +19,7 @@ type Config struct {
 	Agent    AgentConfig    `yaml:"agent"`
 	Security SecurityConfig `yaml:"security"`
 	Database DatabaseConfig `yaml:"database"`
+	Auth     AuthConfig     `yaml:"auth"`
 }
 
 type ServerConfig struct {
@@ -42,8 +45,8 @@ type OpenAIConfig struct {
 }
 
 type SecurityConfig struct {
-	Tools      []ToolConfig `yaml:"tools,omitempty"`      // 向后兼容：支持在主配置文件中定义工具
-	ToolsDir   string       `yaml:"tools_dir,omitempty"`  // 工具配置文件目录（新方式）
+	Tools    []ToolConfig `yaml:"tools,omitempty"`     // 向后兼容：支持在主配置文件中定义工具
+	ToolsDir string       `yaml:"tools_dir,omitempty"` // 工具配置文件目录（新方式）
 }
 
 type DatabaseConfig struct {
@@ -54,29 +57,36 @@ type AgentConfig struct {
 	MaxIterations int `yaml:"max_iterations" json:"max_iterations"`
 }
 
+type AuthConfig struct {
+	Password                    string `yaml:"password" json:"password"`
+	SessionDurationHours        int    `yaml:"session_duration_hours" json:"session_duration_hours"`
+	GeneratedPassword           string `yaml:"-" json:"-"`
+	GeneratedPasswordPersisted  bool   `yaml:"-" json:"-"`
+	GeneratedPasswordPersistErr string `yaml:"-" json:"-"`
+}
 type ToolConfig struct {
 	Name             string            `yaml:"name"`
 	Command          string            `yaml:"command"`
-	Args             []string          `yaml:"args,omitempty"`        // 固定参数（可选）
+	Args             []string          `yaml:"args,omitempty"`              // 固定参数（可选）
 	ShortDescription string            `yaml:"short_description,omitempty"` // 简短描述（用于工具列表，减少token消耗）
-	Description      string            `yaml:"description"`           // 详细描述（用于工具文档）
+	Description      string            `yaml:"description"`                 // 详细描述（用于工具文档）
 	Enabled          bool              `yaml:"enabled"`
-	Parameters       []ParameterConfig `yaml:"parameters,omitempty"` // 参数定义（可选）
+	Parameters       []ParameterConfig `yaml:"parameters,omitempty"`  // 参数定义（可选）
 	ArgMapping       string            `yaml:"arg_mapping,omitempty"` // 参数映射方式: "auto", "manual", "template"（可选）
 }
 
 // ParameterConfig 参数配置
 type ParameterConfig struct {
-	Name        string      `yaml:"name"`                  // 参数名称
-	Type        string      `yaml:"type"`                  // 参数类型: string, int, bool, array
-	Description string      `yaml:"description"`           // 参数描述
-	Required    bool        `yaml:"required,omitempty"`     // 是否必需
-	Default     interface{} `yaml:"default,omitempty"`      // 默认值
-	Flag        string      `yaml:"flag,omitempty"`         // 命令行标志，如 "-u", "--url", "-p"
-	Position    *int        `yaml:"position,omitempty"`    // 位置参数的位置（从0开始）
-	Format      string      `yaml:"format,omitempty"`      // 参数格式: "flag", "positional", "combined" (flag=value), "template"
-	Template    string      `yaml:"template,omitempty"`    // 模板字符串，如 "{flag} {value}" 或 "{value}"
-	Options     []string    `yaml:"options,omitempty"`     // 可选值列表（用于枚举）
+	Name        string      `yaml:"name"`               // 参数名称
+	Type        string      `yaml:"type"`               // 参数类型: string, int, bool, array
+	Description string      `yaml:"description"`        // 参数描述
+	Required    bool        `yaml:"required,omitempty"` // 是否必需
+	Default     interface{} `yaml:"default,omitempty"`  // 默认值
+	Flag        string      `yaml:"flag,omitempty"`     // 命令行标志，如 "-u", "--url", "-p"
+	Position    *int        `yaml:"position,omitempty"` // 位置参数的位置（从0开始）
+	Format      string      `yaml:"format,omitempty"`   // 参数格式: "flag", "positional", "combined" (flag=value), "template"
+	Template    string      `yaml:"template,omitempty"` // 模板字符串，如 "{flag} {value}" 或 "{value}"
+	Options     []string    `yaml:"options,omitempty"`  // 可选值列表（用于枚举）
 }
 
 func Load(path string) (*Config, error) {
@@ -90,65 +100,189 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
+	if cfg.Auth.SessionDurationHours <= 0 {
+		cfg.Auth.SessionDurationHours = 12
+	}
+
+	if strings.TrimSpace(cfg.Auth.Password) == "" {
+		password, err := generateStrongPassword(24)
+		if err != nil {
+			return nil, fmt.Errorf("生成默认密码失败: %w", err)
+		}
+
+		cfg.Auth.Password = password
+		cfg.Auth.GeneratedPassword = password
+
+		if err := PersistAuthPassword(path, password); err != nil {
+			cfg.Auth.GeneratedPasswordPersisted = false
+			cfg.Auth.GeneratedPasswordPersistErr = err.Error()
+		} else {
+			cfg.Auth.GeneratedPasswordPersisted = true
+		}
+	}
+
 	// 如果配置了工具目录，从目录加载工具配置
 	if cfg.Security.ToolsDir != "" {
 		configDir := filepath.Dir(path)
 		toolsDir := cfg.Security.ToolsDir
-		
+
 		// 如果是相对路径，相对于配置文件所在目录
 		if !filepath.IsAbs(toolsDir) {
 			toolsDir = filepath.Join(configDir, toolsDir)
 		}
-		
+
 		tools, err := LoadToolsFromDir(toolsDir)
 		if err != nil {
 			return nil, fmt.Errorf("从工具目录加载工具配置失败: %w", err)
 		}
-		
+
 		// 合并工具配置：目录中的工具优先，主配置中的工具作为补充
 		existingTools := make(map[string]bool)
 		for _, tool := range tools {
 			existingTools[tool.Name] = true
 		}
-		
+
 		// 添加主配置中不存在于目录中的工具（向后兼容）
 		for _, tool := range cfg.Security.Tools {
 			if !existingTools[tool.Name] {
 				tools = append(tools, tool)
 			}
 		}
-		
+
 		cfg.Security.Tools = tools
 	}
 
 	return &cfg, nil
 }
 
+func generateStrongPassword(length int) (string, error) {
+	if length <= 0 {
+		length = 24
+	}
+
+	bytesLen := length
+	randomBytes := make([]byte, bytesLen)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", err
+	}
+
+	password := base64.RawURLEncoding.EncodeToString(randomBytes)
+	if len(password) > length {
+		password = password[:length]
+	}
+	return password, nil
+}
+
+func PersistAuthPassword(path, password string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	inAuthBlock := false
+	authIndent := -1
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !inAuthBlock {
+			if strings.HasPrefix(trimmed, "auth:") {
+				inAuthBlock = true
+				authIndent = len(line) - len(strings.TrimLeft(line, " "))
+			}
+			continue
+		}
+
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		leadingSpaces := len(line) - len(strings.TrimLeft(line, " "))
+		if leadingSpaces <= authIndent {
+			// 离开 auth 块
+			inAuthBlock = false
+			authIndent = -1
+			// 继续寻找其它 auth 块（理论上没有）
+			if strings.HasPrefix(trimmed, "auth:") {
+				inAuthBlock = true
+				authIndent = leadingSpaces
+			}
+			continue
+		}
+
+		if strings.HasPrefix(strings.TrimSpace(line), "password:") {
+			prefix := line[:len(line)-len(strings.TrimLeft(line, " "))]
+			comment := ""
+			if idx := strings.Index(line, "#"); idx >= 0 {
+				comment = strings.TrimRight(line[idx:], " ")
+			}
+
+			newLine := fmt.Sprintf("%spassword: %s", prefix, password)
+			if comment != "" {
+				if !strings.HasPrefix(comment, " ") {
+					newLine += " "
+				}
+				newLine += comment
+			}
+			lines[i] = newLine
+			break
+		}
+	}
+
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+func PrintGeneratedPasswordWarning(password string, persisted bool, persistErr string) {
+	if strings.TrimSpace(password) == "" {
+		return
+	}
+
+	if persisted {
+		fmt.Println("[CyberStrikeAI] ✅ 已为您自动生成并写入 Web 登录密码。")
+	} else {
+		if persistErr != "" {
+			fmt.Printf("[CyberStrikeAI] ⚠️ 无法自动写入配置文件中的密码: %s\n", persistErr)
+		} else {
+			fmt.Println("[CyberStrikeAI] ⚠️ 无法自动写入配置文件中的密码。")
+		}
+		fmt.Println("请手动将以下随机密码写入 config.yaml 的 auth.password：")
+	}
+
+	fmt.Println("----------------------------------------------------------------")
+	fmt.Println("CyberStrikeAI Auto-Generated Web Password")
+	fmt.Printf("Password: %s\n", password)
+	fmt.Println("WARNING: Anyone with this password can fully control CyberStrikeAI.")
+	fmt.Println("Please store it securely and change it in config.yaml as soon as possible.")
+	fmt.Println("警告：持有此密码的人将拥有对 CyberStrikeAI 的完全控制权限。")
+	fmt.Println("请妥善保管，并尽快在 config.yaml 中修改 auth.password！")
+	fmt.Println("----------------------------------------------------------------")
+}
+
 // LoadToolsFromDir 从目录加载所有工具配置文件
 func LoadToolsFromDir(dir string) ([]ToolConfig, error) {
 	var tools []ToolConfig
-	
+
 	// 检查目录是否存在
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return tools, nil // 目录不存在时返回空列表，不报错
 	}
-	
+
 	// 读取目录中的所有 .yaml 和 .yml 文件
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("读取工具目录失败: %w", err)
 	}
-	
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		
+
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			continue
 		}
-		
+
 		filePath := filepath.Join(dir, name)
 		tool, err := LoadToolFromFile(filePath)
 		if err != nil {
@@ -156,10 +290,10 @@ func LoadToolsFromDir(dir string) ([]ToolConfig, error) {
 			fmt.Printf("警告: 加载工具配置文件 %s 失败: %v\n", filePath, err)
 			continue
 		}
-		
+
 		tools = append(tools, *tool)
 	}
-	
+
 	return tools, nil
 }
 
@@ -169,12 +303,12 @@ func LoadToolFromFile(path string) (*ToolConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读取文件失败: %w", err)
 	}
-	
+
 	var tool ToolConfig
 	if err := yaml.Unmarshal(data, &tool); err != nil {
 		return nil, fmt.Errorf("解析工具配置失败: %w", err)
 	}
-	
+
 	// 验证必需字段
 	if tool.Name == "" {
 		return nil, fmt.Errorf("工具名称不能为空")
@@ -182,7 +316,7 @@ func LoadToolFromFile(path string) (*ToolConfig, error) {
 	if tool.Command == "" {
 		return nil, fmt.Errorf("工具命令不能为空")
 	}
-	
+
 	return &tool, nil
 }
 
@@ -215,6 +349,8 @@ func Default() *Config {
 		Database: DatabaseConfig{
 			Path: "data/conversations.db",
 		},
+		Auth: AuthConfig{
+			SessionDurationHours: 12,
+		},
 	}
 }
-

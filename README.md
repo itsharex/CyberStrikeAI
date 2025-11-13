@@ -10,6 +10,7 @@
   ![Preview](./img/mcp-stdio2.png)
 
 ## Changelog
+- 2025.11.13 Added authentication for the web mode, including automatic password generation and in-app password change
 - 2025.11.13 Added `Settings` feature in the frontend
 - 2025.11.13 Added MCP Stdio mode support, now seamlessly integrated and usable in code editors, CLI, and automation scripts
 - 2025.11.12 Added task stop functionality, optimized frontend
@@ -38,6 +39,7 @@
 - 💾 **Data Persistence** - SQLite database stores conversation history and process details
 - 📝 **Detailed Logging** - Structured logging for easy debugging and troubleshooting
 - 🔒 **Secure Execution** - Tool execution isolation, error handling, and timeout control
+- 🔐 **Password-Protected Web Interface** - Unified authentication middleware secures every API call with configurable session duration
 
 ## 📁 Project Structure
 
@@ -138,6 +140,11 @@ openai:
   base_url: "https://api.openai.com/v1"  # Or use other compatible API addresses
   model: "gpt-4"  # Or "deepseek-chat", "gpt-3.5-turbo", etc.
 
+# Authentication configuration
+auth:
+  password: ""                 # Leave empty to auto-generate a strong password on first launch
+  session_duration_hours: 12   # Login validity (hours)
+
 # Server configuration
 server:
   host: "0.0.0.0"
@@ -216,6 +223,8 @@ You will see:
 - API Key, Base URL, and Model are required fields (marked with *), must be filled for normal use
 - Configuration is automatically saved to the `config.yaml` file
 - Opening settings automatically loads the latest configuration from the current configuration file
+- If `auth.password` is empty, the server generates a random strong password on first launch, writes it back to `config.yaml`, and prints it in the terminal with a security warning
+- The web UI prompts for this password when you first open it; you can change it anytime in **Settings → Security**
 
 ## ⚙️ Configuration
 
@@ -239,6 +248,11 @@ The system provides a visual configuration management interface. You can access 
 ### Complete Configuration Example
 
 ```yaml
+# Authentication
+auth:
+  password: "change-me"          # Web login password
+  session_duration_hours: 12     # Session validity (hours)
+
 # Server configuration
 server:
   host: "0.0.0.0"  # Listen address
@@ -317,6 +331,14 @@ parameters:
 Define tool configurations directly in `config.yaml` under `security.tools`.
 
 **Note**: If both `tools_dir` and `tools` are configured, tools in `tools_dir` take priority.
+
+### Authentication & Security
+
+- **Login Workflow**: Every web/API request (except `/api/auth/login`) is protected by a unified middleware. Obtain a token through `/api/auth/login` with the configured password, then include `Authorization: Bearer <token>` in subsequent requests.
+- **Automatic Password Generation**: When `auth.password` is empty, the server generates a 24-character strong password on startup, writes it back to `config.yaml`, and prints the password with bilingual security warnings in the terminal.
+- **Session Control**: Sessions expire according to `auth.session_duration_hours`. After expiration or password change, clients must log in again.
+- **Password Rotation**: Use **Settings → Security** in the web UI (or call `/api/auth/change-password`) to update the password. The change revokes all existing sessions instantly.
+- **MCP Port**: The standalone MCP server (default `8081`) remains authentication-free for IDE integrations. Restrict network access to this port if required.
 
 ## 🚀 Usage Examples
 
@@ -630,6 +652,9 @@ CyberStrikeAI supports two MCP transport modes:
 - Suitable for web applications and other HTTP clients
 - Default listen address: `0.0.0.0:8081/mcp`
 - Accessible via `/api/mcp` endpoint
+- 🌐 Remote-friendly: expose a single endpoint that IDEs, web apps, or automation running on other machines can reach over the network.
+- 🧩 Easy reuse: no extra binaries—just point any HTTP-capable client (curl, Postman, cloud automations) to the service.
+- 🔁 Always-on workflow: runs together with the main web server, so the same deployment handles UI, API, and MCP traffic.
 
 #### MCP HTTP Mode (IDE Integration)
 
@@ -661,6 +686,21 @@ You can connect IDEs such as Cursor or Claude Desktop directly to the built-in H
 - Fully compliant with JSON-RPC 2.0 specification
 - Supports string, number, and null types for id field
 - Properly handles notification messages
+- 🔒 Isolated execution: the stdio binary is built and launched separately, so you can run it with least-privilege policies and tighter filesystem/network permissions.
+- 🪟 No network exposure: data stays inside the local process boundary—perfect when you do not want an HTTP port listening on your machine.
+- 🧰 Editor-first experience: Cursor, Claude Desktop, and other IDEs expect stdio transports for local tooling, enabling plug-and-play integration with minimal setup.
+- 🧱 Defense in depth: using both transports in parallel lets you pick the safest option per workflow—stdio for local, HTTP for remote or shared deployments.
+
+#### Mode comparison: pick what fits your workflow
+
+| Aspect              | `mcp-http`                                     | `mcp-stdio`                                                      |
+|---------------------|-----------------------------------------------|------------------------------------------------------------------|
+| Transport           | HTTP/HTTPS over the network                   | Standard input/output streams                                   |
+| Deployment          | Runs inside the main server process           | Compiled as a standalone binary                                 |
+| Isolation & safety  | Depends on server hardening (firewall, auth)  | Sandboxed by OS process boundaries, no socket exposure          |
+| Remote access       | ✅ Accessible across machines                  | ❌ Local only (unless tunneled manually)                         |
+| IDE integration     | Works with HTTP-capable clients               | Native fit for Cursor/Claude Desktop stdio connectors           |
+| Best use case       | Remote automations, shared services           | Local development, high-trust / locked-down environments        |
 
 ### Supported Methods
 
