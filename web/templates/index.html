@@ -119,8 +119,22 @@
                                 <input type="text" id="tools-search" placeholder="搜索工具..." onkeypress="handleSearchKeyPress(event)" oninput="if(this.value.trim() === '') clearSearch()" />
                                 <button class="btn-search" onclick="searchTools()" title="搜索">🔍</button>
                             </div>
+                            <div class="tools-stats" id="tools-stats"></div>
                         </div>
                         <div id="tools-list" class="tools-list"></div>
+                    </div>
+                </div>
+
+                <!-- 外部MCP配置 -->
+                <div class="settings-section">
+                    <h3>外部 MCP 配置</h3>
+                    <div class="external-mcp-controls">
+                        <div class="external-mcp-actions">
+                            <button class="btn-primary" onclick="showAddExternalMCPModal()">添加外部MCP</button>
+                            <button class="btn-secondary" onclick="loadExternalMCPs()">刷新</button>
+                            <div class="external-mcp-stats" id="external-mcp-stats"></div>
+                        </div>
+                        <div id="external-mcp-list" class="external-mcp-list"></div>
                     </div>
                 </div>
 
@@ -243,6 +257,51 @@
                     <h3>错误信息</h3>
                     <pre id="detail-error" class="code-block error"></pre>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 外部MCP配置模态框 -->
+    <div id="external-mcp-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 id="external-mcp-modal-title">添加外部MCP</h2>
+                <span class="modal-close" onclick="closeExternalMCPModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="external-mcp-json">配置JSON <span style="color: red;">*</span></label>
+                    <textarea id="external-mcp-json" rows="15" placeholder='{\n  "hexstrike-ai": {\n    "command": "python3",\n    "args": ["/path/to/script.py"],\n    "description": "描述",\n    "timeout": 300\n  }\n}' style="font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.5;"></textarea>
+                    <div class="password-hint">
+                        <strong>配置格式：</strong>JSON对象，key为配置名称，value为配置内容。状态通过"启动/停止"按钮控制，无需在JSON中配置。<br>
+                        <strong>配置示例：</strong><br>
+                        <strong>stdio模式：</strong><br>
+                        <code style="display: block; margin: 8px 0; padding: 8px; background: var(--bg-secondary); border-radius: 4px; white-space: pre-wrap;">{
+  "hexstrike-ai": {
+    "command": "python3",
+    "args": ["/path/to/script.py", "--server", "http://example.com"],
+    "description": "描述",
+    "timeout": 300
+  }
+}</code>
+                        <strong>HTTP模式：</strong><br>
+                        <code style="display: block; margin: 8px 0; padding: 8px; background: var(--bg-secondary); border-radius: 4px; white-space: pre-wrap;">{
+  "cyberstrike-ai-http": {
+    "transport": "http",
+    "url": "http://127.0.0.1:8081/mcp"
+  }
+}</code>
+                    </div>
+                    <div id="external-mcp-json-error" class="error-message" style="display: none; margin-top: 8px; padding: 8px; background: rgba(220, 53, 69, 0.1); border: 1px solid rgba(220, 53, 69, 0.3); border-radius: 4px; color: var(--error-color); font-size: 0.875rem;"></div>
+                </div>
+                <div class="form-group">
+                    <button type="button" class="btn-secondary" onclick="formatExternalMCPJSON()" style="margin-top: 8px;">格式化JSON</button>
+                    <button type="button" class="btn-secondary" onclick="loadExternalMCPExample()" style="margin-top: 8px; margin-left: 8px;">加载示例</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeExternalMCPModal()">取消</button>
+                <button class="btn-primary" onclick="saveExternalMCP()">保存</button>
             </div>
         </div>
     </div>

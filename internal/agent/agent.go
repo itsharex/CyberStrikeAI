@@ -19,16 +19,18 @@ import (
 
 // Agent AI代理
 type Agent struct {
-	openAIClient  *http.Client
-	config        *config.OpenAIConfig
-	mcpServer     *mcp.Server
-	logger        *zap.Logger
-	maxIterations int
-	mu            sync.RWMutex // 添加互斥锁以支持并发更新
+	openAIClient      *http.Client
+	config            *config.OpenAIConfig
+	mcpServer         *mcp.Server
+	externalMCPMgr    *mcp.ExternalMCPManager // 外部MCP管理器
+	logger            *zap.Logger
+	maxIterations     int
+	mu                sync.RWMutex // 添加互斥锁以支持并发更新
+	toolNameMapping   map[string]string // 工具名称映射：OpenAI格式 -> 原始格式（用于外部MCP工具）
 }
 
 // NewAgent 创建新的Agent
-func NewAgent(cfg *config.OpenAIConfig, mcpServer *mcp.Server, logger *zap.Logger, maxIterations int) *Agent {
+func NewAgent(cfg *config.OpenAIConfig, mcpServer *mcp.Server, externalMCPMgr *mcp.ExternalMCPManager, logger *zap.Logger, maxIterations int) *Agent {
 	// 如果 maxIterations 为 0 或负数，使用默认值 30
 	if maxIterations <= 0 {
 		maxIterations = 30
@@ -55,10 +57,12 @@ func NewAgent(cfg *config.OpenAIConfig, mcpServer *mcp.Server, logger *zap.Logge
 			Timeout:   30 * time.Minute, // 从5分钟增加到30分钟
 			Transport: transport,
 		},
-		config:        cfg,
-		mcpServer:     mcpServer,
-		logger:        logger,
-		maxIterations: maxIterations,
+		config:            cfg,
+		mcpServer:         mcpServer,
+		externalMCPMgr:    externalMCPMgr,
+		logger:            logger,
+		maxIterations:     maxIterations,
+		toolNameMapping:   make(map[string]string), // 初始化工具名称映射
 	}
 }
 
@@ -578,7 +582,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 // getAvailableTools 获取可用工具
 // 从MCP服务器动态获取工具列表，使用简短描述以减少token消耗
 func (a *Agent) getAvailableTools() []Tool {
-	// 从MCP服务器获取所有已注册的工具
+	// 从MCP服务器获取所有已注册的内部工具
 	mcpTools := a.mcpServer.GetAllTools()
 	
 	// 转换为OpenAI格式的工具定义
@@ -603,8 +607,91 @@ func (a *Agent) getAvailableTools() []Tool {
 		})
 	}
 	
+	// 获取外部MCP工具
+	if a.externalMCPMgr != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		
+		externalTools, err := a.externalMCPMgr.GetAllTools(ctx)
+		if err != nil {
+			a.logger.Warn("获取外部MCP工具失败", zap.Error(err))
+		} else {
+			// 获取外部MCP配置，用于检查工具启用状态
+			externalMCPConfigs := a.externalMCPMgr.GetConfigs()
+			
+			// 清空并重建工具名称映射
+			a.mu.Lock()
+			a.toolNameMapping = make(map[string]string)
+			a.mu.Unlock()
+			
+			// 将外部MCP工具添加到工具列表（只添加启用的工具）
+			for _, externalTool := range externalTools {
+				// 解析工具名称：mcpName::toolName
+				var mcpName, actualToolName string
+				if idx := strings.Index(externalTool.Name, "::"); idx > 0 {
+					mcpName = externalTool.Name[:idx]
+					actualToolName = externalTool.Name[idx+2:]
+				} else {
+					continue // 跳过格式不正确的工具
+				}
+				
+				// 检查工具是否启用
+				enabled := false
+				if cfg, exists := externalMCPConfigs[mcpName]; exists {
+					// 首先检查外部MCP是否启用
+					if !cfg.ExternalMCPEnable && !(cfg.Enabled && !cfg.Disabled) {
+						enabled = false // MCP未启用，所有工具都禁用
+					} else {
+						// MCP已启用，检查单个工具的启用状态
+						// 如果ToolEnabled为空或未设置该工具，默认为启用（向后兼容）
+						if cfg.ToolEnabled == nil {
+							enabled = true // 未设置工具状态，默认为启用
+						} else if toolEnabled, exists := cfg.ToolEnabled[actualToolName]; exists {
+							enabled = toolEnabled // 使用配置的工具状态
+						} else {
+							enabled = true // 工具未在配置中，默认为启用
+						}
+					}
+				}
+				
+				// 只添加启用的工具
+				if !enabled {
+					continue
+				}
+				
+				// 使用简短描述（如果存在），否则使用详细描述
+				description := externalTool.ShortDescription
+				if description == "" {
+					description = externalTool.Description
+				}
+				
+				// 转换schema中的类型为OpenAI标准类型
+				convertedSchema := a.convertSchemaTypes(externalTool.InputSchema)
+				
+				// 将工具名称中的 "::" 替换为 "__" 以符合OpenAI命名规范
+				// OpenAI要求工具名称只能包含 [a-zA-Z0-9_-]
+				openAIName := strings.ReplaceAll(externalTool.Name, "::", "__")
+				
+				// 保存名称映射关系（OpenAI格式 -> 原始格式）
+				a.mu.Lock()
+				a.toolNameMapping[openAIName] = externalTool.Name
+				a.mu.Unlock()
+				
+				tools = append(tools, Tool{
+					Type: "function",
+					Function: FunctionDefinition{
+						Name:        openAIName, // 使用符合OpenAI规范的名称
+						Description: description,
+						Parameters:  convertedSchema,
+					},
+				})
+			}
+		}
+	}
+	
 	a.logger.Debug("获取可用工具列表",
-		zap.Int("count", len(tools)),
+		zap.Int("internalTools", len(mcpTools)),
+		zap.Int("totalTools", len(tools)),
 	)
 	
 	return tools
@@ -898,8 +985,26 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 		zap.Any("args", args),
 	)
 
-	// 通过MCP服务器调用工具
-	result, executionID, err := a.mcpServer.CallTool(ctx, toolName, args)
+	var result *mcp.ToolResult
+	var executionID string
+	var err error
+
+	// 检查是否是外部MCP工具（通过工具名称映射）
+	a.mu.RLock()
+	originalToolName, isExternalTool := a.toolNameMapping[toolName]
+	a.mu.RUnlock()
+
+	if isExternalTool && a.externalMCPMgr != nil {
+		// 使用原始工具名称调用外部MCP工具
+		a.logger.Debug("调用外部MCP工具",
+			zap.String("openAIName", toolName),
+			zap.String("originalName", originalToolName),
+		)
+		result, executionID, err = a.externalMCPMgr.CallTool(ctx, originalToolName, args)
+	} else {
+		// 调用内部MCP工具
+		result, executionID, err = a.mcpServer.CallTool(ctx, toolName, args)
+	}
 	
 	// 如果调用失败（如工具不存在），返回友好的错误信息而不是抛出异常
 	if err != nil {

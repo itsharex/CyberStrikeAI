@@ -14,20 +14,27 @@ import (
 
 // MonitorHandler 监控处理器
 type MonitorHandler struct {
-	mcpServer *mcp.Server
-	executor  *security.Executor
-	db        *database.DB
-	logger    *zap.Logger
+	mcpServer      *mcp.Server
+	externalMCPMgr *mcp.ExternalMCPManager
+	executor       *security.Executor
+	db             *database.DB
+	logger         *zap.Logger
 }
 
 // NewMonitorHandler 创建新的监控处理器
 func NewMonitorHandler(mcpServer *mcp.Server, executor *security.Executor, db *database.DB, logger *zap.Logger) *MonitorHandler {
 	return &MonitorHandler{
-		mcpServer: mcpServer,
-		executor:  executor,
-		db:        db,
-		logger:    logger,
+		mcpServer:      mcpServer,
+		externalMCPMgr: nil, // 将在创建后设置
+		executor:       executor,
+		db:             db,
+		logger:         logger,
 	}
+}
+
+// SetExternalMCPManager 设置外部MCP管理器
+func (h *MonitorHandler) SetExternalMCPManager(mgr *mcp.ExternalMCPManager) {
+	h.externalMCPMgr = mgr
 }
 
 // MonitorResponse 监控响应
@@ -128,15 +135,49 @@ func (h *MonitorHandler) loadExecutionsWithPagination(page, pageSize int) ([]*mc
 }
 
 func (h *MonitorHandler) loadStats() map[string]*mcp.ToolStats {
+	// 合并内部MCP服务器和外部MCP管理器的统计信息
+	stats := make(map[string]*mcp.ToolStats)
+
+	// 加载内部MCP服务器的统计信息
 	if h.db == nil {
-		return h.mcpServer.GetStats()
+		internalStats := h.mcpServer.GetStats()
+		for k, v := range internalStats {
+			stats[k] = v
+		}
+	} else {
+		dbStats, err := h.db.LoadToolStats()
+		if err != nil {
+			h.logger.Warn("从数据库加载统计信息失败，回退到内存数据", zap.Error(err))
+			internalStats := h.mcpServer.GetStats()
+			for k, v := range internalStats {
+				stats[k] = v
+			}
+		} else {
+			for k, v := range dbStats {
+				stats[k] = v
+			}
+		}
 	}
 
-	stats, err := h.db.LoadToolStats()
-	if err != nil {
-		h.logger.Warn("从数据库加载统计信息失败，回退到内存数据", zap.Error(err))
-		return h.mcpServer.GetStats()
+	// 合并外部MCP管理器的统计信息
+	if h.externalMCPMgr != nil {
+		externalStats := h.externalMCPMgr.GetToolStats()
+		for k, v := range externalStats {
+			// 如果已存在，合并统计信息
+			if existing, exists := stats[k]; exists {
+				existing.TotalCalls += v.TotalCalls
+				existing.SuccessCalls += v.SuccessCalls
+				existing.FailedCalls += v.FailedCalls
+				// 使用最新的调用时间
+				if v.LastCallTime != nil && (existing.LastCallTime == nil || v.LastCallTime.After(*existing.LastCallTime)) {
+					existing.LastCallTime = v.LastCallTime
+				}
+			} else {
+				stats[k] = v
+			}
+		}
 	}
+
 	return stats
 }
 
@@ -145,13 +186,32 @@ func (h *MonitorHandler) loadStats() map[string]*mcp.ToolStats {
 func (h *MonitorHandler) GetExecution(c *gin.Context) {
 	id := c.Param("id")
 
+	// 先从内部MCP服务器查找
 	exec, exists := h.mcpServer.GetExecution(id)
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "执行记录未找到"})
+	if exists {
+		c.JSON(http.StatusOK, exec)
 		return
 	}
 
-	c.JSON(http.StatusOK, exec)
+	// 如果找不到，尝试从外部MCP管理器查找
+	if h.externalMCPMgr != nil {
+		exec, exists = h.externalMCPMgr.GetExecution(id)
+		if exists {
+			c.JSON(http.StatusOK, exec)
+			return
+		}
+	}
+
+	// 如果都找不到，尝试从数据库查找（如果使用数据库存储）
+	if h.db != nil {
+		exec, err := h.db.GetToolExecution(id)
+		if err == nil && exec != nil {
+			c.JSON(http.StatusOK, exec)
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{"error": "执行记录未找到"})
 }
 
 // GetStats 获取统计信息
@@ -159,4 +219,5 @@ func (h *MonitorHandler) GetStats(c *gin.Context) {
 	stats := h.loadStats()
 	c.JSON(http.StatusOK, stats)
 }
+
 

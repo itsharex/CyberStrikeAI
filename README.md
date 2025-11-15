@@ -845,6 +845,209 @@ curl -X POST http://localhost:8080/api/mcp \
   }'
 ```
 
+## 🔗 External MCP Integration
+
+CyberStrikeAI supports integrating external MCP servers to extend tool capabilities. External MCP tools are automatically registered in the system, and AI can call them just like built-in tools.
+
+### Configuration Methods
+
+#### Method 1: Configure via Web Interface (Recommended)
+
+1. After starting the server, access the web interface
+2. Click the "Settings" button in the top-right corner
+3. Find the "External MCP" configuration section in the settings
+4. Click the "Add External MCP" button
+5. Fill in the configuration information:
+   - **Name**: Unique identifier for the external MCP server (e.g., `hexstrike-ai`)
+   - **Transport Mode**: Choose `stdio` or `http`
+   - **Description**: Optional, used to describe the MCP server's functionality
+   - **Timeout**: Tool execution timeout in seconds, default 300 seconds
+   - **Enable Status**: Whether to enable this external MCP immediately
+6. Fill in the corresponding configuration based on transport mode:
+   - **stdio Mode**:
+     - **Command**: Startup command for the MCP server (e.g., `python3`)
+     - **Args**: Startup arguments array (e.g., `["/path/to/mcp_server.py", "--arg", "value"]`)
+   - **HTTP Mode**:
+     - **URL**: HTTP endpoint address of the MCP server (e.g., `http://127.0.0.1:8888`)
+7. Click the "Save" button, configuration will be automatically saved to `config.yaml`
+8. The system will automatically connect to the external MCP server and load its tools
+
+#### Method 2: Edit Configuration File Directly
+
+Add `external_mcp` configuration in `config.yaml`:
+
+```yaml
+# External MCP Configuration
+external_mcp:
+  servers:
+    # External MCP server name (unique identifier)
+    hexstrike-ai:
+      # stdio mode configuration
+      command: python3
+      args:
+        - /path/to/hexstrike_mcp.py
+        - --server
+        - 'http://127.0.0.1:8888'
+      
+      # Or HTTP mode configuration (choose one)
+      # transport: http
+      # url: http://127.0.0.1:8888
+      
+      # Common configuration
+      description: HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform
+      timeout: 300  # Timeout in seconds
+      external_mcp_enable: true  # Whether to enable
+      
+      # Tool-level control (optional)
+      tool_enabled:
+        nmap_scan: true
+        sqlmap_scan: true
+        # ... other tools
+```
+
+### Transport Mode Description
+
+#### stdio Mode
+
+Communicates with external MCP servers via standard input/output (stdio), suitable for locally running MCP servers.
+
+**Configuration Example:**
+```yaml
+external_mcp:
+  servers:
+    my-mcp-server:
+      command: python3
+      args:
+        - /path/to/mcp_server.py
+        - --config
+        - /path/to/config.json
+      description: My Custom MCP Server
+      timeout: 300
+      external_mcp_enable: true
+```
+
+**Features:**
+- ✅ Local process communication, no network port required
+- ✅ High security, data doesn't traverse network
+- ✅ Suitable for local development and testing
+
+#### HTTP Mode
+
+Communicates with external MCP servers via HTTP requests, suitable for remote MCP servers or scenarios requiring cross-network access.
+
+**Configuration Example:**
+```yaml
+external_mcp:
+  servers:
+    remote-mcp-server:
+      transport: http
+      url: http://192.168.1.100:8888
+      description: Remote MCP Server
+      timeout: 300
+      external_mcp_enable: true
+```
+
+**Features:**
+- ✅ Supports remote access
+- ✅ Suitable for distributed deployment
+- ✅ Easy to integrate with existing HTTP services
+
+### Tool Naming Convention
+
+External MCP tools in the system use the naming format: `{mcp-server-name}::{tool-name}`
+
+For example:
+- External MCP server name: `hexstrike-ai`
+- Tool name: `nmap_scan`
+- Full tool name in system: `hexstrike-ai::nmap_scan`
+
+AI will automatically recognize and use the full tool name when calling.
+
+### Tool Enable/Disable Control
+
+#### Global Enable/Disable
+
+Control the enable status of the entire external MCP server via the `external_mcp_enable` field:
+- `true`: Enabled, system will automatically connect and load tools
+- `false`: Disabled, system will not connect to this server
+
+#### Tool-Level Control
+
+Precisely control the enable status of each tool via the `tool_enabled` field:
+
+```yaml
+external_mcp:
+  servers:
+    hexstrike-ai:
+      # ... other configuration
+      tool_enabled:
+        nmap_scan: true      # Enable this tool
+        sqlmap_scan: false   # Disable this tool
+        nuclei_scan: true    # Enable this tool
+```
+
+- If a tool is not listed in `tool_enabled`, it is enabled by default
+- If a tool is set to `false`, it won't appear in the tool list and AI cannot call it
+
+### Managing External MCP
+
+#### Via Web Interface
+
+1. **View External MCP List**: View all configured external MCP servers in the settings interface
+2. **Start/Stop**: Start or stop external MCP server connections at any time
+3. **Edit Configuration**: Modify external MCP configuration information
+4. **Delete Configuration**: Remove unnecessary external MCP servers
+
+#### Via API
+
+- **Get External MCP List**: `GET /api/external-mcp`
+- **Add External MCP**: `POST /api/external-mcp`
+- **Update External MCP**: `PUT /api/external-mcp/:name`
+- **Delete External MCP**: `DELETE /api/external-mcp/:name`
+- **Start External MCP**: `POST /api/external-mcp/:name/start`
+- **Stop External MCP**: `POST /api/external-mcp/:name/stop`
+
+### Monitoring and Statistics
+
+External MCP tool execution records and statistics are automatically recorded in the system:
+
+- **Execution Records**: View execution history of all external MCP tools in the "Tool Monitoring" page
+- **Execution Statistics**: The execution statistics panel displays call counts and success/failure statistics for external MCP tools
+- **Real-time Monitoring**: Real-time viewing of external MCP tool execution status
+
+### Troubleshooting
+
+**Issue: External MCP Cannot Connect**
+
+- ✅ Check if `command` and `args` configuration are correct (stdio mode)
+- ✅ Check if `url` configuration is correct and accessible (HTTP mode)
+- ✅ Check if the external MCP server is running normally
+- ✅ View server logs for detailed error information
+- ✅ Check network connection (HTTP mode)
+- ✅ Check firewall settings (HTTP mode)
+
+**Issue: External MCP Tools Not Displayed**
+
+- ✅ Confirm `external_mcp_enable: true`
+- ✅ Check `tool_enabled` configuration to ensure tools are not disabled
+- ✅ Confirm external MCP server has successfully connected
+- ✅ View server logs to confirm if tools have been loaded
+
+**Issue: External MCP Tool Execution Failed**
+
+- ✅ Check if external MCP server is running normally
+- ✅ View tool execution logs for detailed error information
+- ✅ Check if timeout setting is reasonable
+- ✅ Confirm external MCP server supports the tool call format
+
+### Best Practices
+
+1. **Naming Convention**: Use meaningful names to identify external MCP servers, avoid conflicts
+2. **Timeout Settings**: Set timeout reasonably based on tool execution time
+3. **Tool Control**: Use `tool_enabled` to precisely control needed tools, avoid loading too many unnecessary tools
+4. **Security Considerations**: HTTP mode is recommended to use intranet addresses or configure appropriate access control
+5. **Monitoring Management**: Regularly check external MCP connection status and execution statistics
+
 ## 🛠️ Security Tool Support
 
 ### Tool Overview

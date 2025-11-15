@@ -20,7 +20,7 @@ log:
 # MCP 协议配置
 # MCP (Model Context Protocol) 用于工具注册和调用
 mcp:
-  enabled: false # 是否启用 MCP 服务器
+  enabled: true # 是否启用 MCP 服务器
   host: 0.0.0.0 # MCP 服务器监听地址
   port: 8081 # MCP 服务器端口
 # AI 模型配置（支持 OpenAI 兼容 API）
@@ -46,3 +46,6 @@ security:
   tools_dir: tools # 工具配置文件目录（相对于配置文件所在目录）
   # 系统会从该目录加载所有 .yaml 格式的工具配置文件
   # 推荐方式：在 tools/ 目录下为每个工具创建独立的配置文件
+# 外部MCP配置
+external_mcp:
+ 

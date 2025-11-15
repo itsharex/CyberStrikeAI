@@ -20,14 +20,15 @@ import (
 
 // App 应用
 type App struct {
-	config    *config.Config
-	logger    *logger.Logger
-	router    *gin.Engine
-	mcpServer *mcp.Server
-	agent     *agent.Agent
-	executor  *security.Executor
-	db        *database.DB
-	auth      *security.AuthManager
+	config         *config.Config
+	logger         *logger.Logger
+	router         *gin.Engine
+	mcpServer      *mcp.Server
+	externalMCPMgr *mcp.ExternalMCPManager
+	agent          *agent.Agent
+	executor       *security.Executor
+	db             *database.DB
+	auth           *security.AuthManager
 }
 
 // New 创建新应用
@@ -76,12 +77,20 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 		cfg.Auth.GeneratedPasswordPersistErr = ""
 	}
 
+	// 创建外部MCP管理器（使用与内部MCP服务器相同的存储）
+	externalMCPMgr := mcp.NewExternalMCPManagerWithStorage(log.Logger, db)
+	if cfg.ExternalMCP.Servers != nil {
+		externalMCPMgr.LoadConfigs(&cfg.ExternalMCP)
+		// 启动所有启用的外部MCP客户端
+		externalMCPMgr.StartAllEnabled()
+	}
+
 	// 创建Agent
 	maxIterations := cfg.Agent.MaxIterations
 	if maxIterations <= 0 {
 		maxIterations = 30 // 默认值
 	}
-	agent := agent.NewAgent(&cfg.OpenAI, mcpServer, log.Logger, maxIterations)
+	agent := agent.NewAgent(&cfg.OpenAI, mcpServer, externalMCPMgr, log.Logger, maxIterations)
 
 	// 获取配置文件路径
 	configPath := "config.yaml"
@@ -92,9 +101,11 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 	// 创建处理器
 	agentHandler := handler.NewAgentHandler(agent, db, log.Logger)
 	monitorHandler := handler.NewMonitorHandler(mcpServer, executor, db, log.Logger)
+	monitorHandler.SetExternalMCPManager(externalMCPMgr) // 设置外部MCP管理器，以便获取外部MCP执行记录
 	conversationHandler := handler.NewConversationHandler(db, log.Logger)
 	authHandler := handler.NewAuthHandler(authManager, cfg, configPath, log.Logger)
-	configHandler := handler.NewConfigHandler(configPath, cfg, mcpServer, executor, agent, log.Logger)
+	configHandler := handler.NewConfigHandler(configPath, cfg, mcpServer, executor, agent, externalMCPMgr, log.Logger)
+	externalMCPHandler := handler.NewExternalMCPHandler(externalMCPMgr, cfg, configPath, log.Logger)
 
 	// 设置路由
 	setupRoutes(
@@ -104,19 +115,21 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 		monitorHandler,
 		conversationHandler,
 		configHandler,
+		externalMCPHandler,
 		mcpServer,
 		authManager,
 	)
 
 	return &App{
-		config:    cfg,
-		logger:    log,
-		router:    router,
-		mcpServer: mcpServer,
-		agent:     agent,
-		executor:  executor,
-		db:        db,
-		auth:      authManager,
+		config:         cfg,
+		logger:         log,
+		router:         router,
+		mcpServer:      mcpServer,
+		externalMCPMgr: externalMCPMgr,
+		agent:          agent,
+		executor:       executor,
+		db:             db,
+		auth:           authManager,
 	}, nil
 }
 
@@ -144,6 +157,14 @@ func (a *App) Run() error {
 	return a.router.Run(addr)
 }
 
+// Shutdown 关闭应用
+func (a *App) Shutdown() {
+	// 停止所有外部MCP客户端
+	if a.externalMCPMgr != nil {
+		a.externalMCPMgr.StopAll()
+	}
+}
+
 // setupRoutes 设置路由
 func setupRoutes(
 	router *gin.Engine,
@@ -152,6 +173,7 @@ func setupRoutes(
 	monitorHandler *handler.MonitorHandler,
 	conversationHandler *handler.ConversationHandler,
 	configHandler *handler.ConfigHandler,
+	externalMCPHandler *handler.ExternalMCPHandler,
 	mcpServer *mcp.Server,
 	authManager *security.AuthManager,
 ) {
@@ -194,6 +216,15 @@ func setupRoutes(
 		protected.GET("/config/tools", configHandler.GetTools)
 		protected.PUT("/config", configHandler.UpdateConfig)
 		protected.POST("/config/apply", configHandler.ApplyConfig)
+
+		// 外部MCP管理
+		protected.GET("/external-mcp", externalMCPHandler.GetExternalMCPs)
+		protected.GET("/external-mcp/stats", externalMCPHandler.GetExternalMCPStats)
+		protected.GET("/external-mcp/:name", externalMCPHandler.GetExternalMCP)
+		protected.PUT("/external-mcp/:name", externalMCPHandler.AddOrUpdateExternalMCP)
+		protected.DELETE("/external-mcp/:name", externalMCPHandler.DeleteExternalMCP)
+		protected.POST("/external-mcp/:name/start", externalMCPHandler.StartExternalMCP)
+		protected.POST("/external-mcp/:name/stop", externalMCPHandler.StopExternalMCP)
 
 		// MCP端点
 		protected.POST("/mcp", func(c *gin.Context) {

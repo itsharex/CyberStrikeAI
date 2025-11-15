@@ -844,6 +844,209 @@ curl -X POST http://localhost:8080/api/mcp \
   }'
 ```
 
+## 🔗 外部 MCP 接入
+
+CyberStrikeAI 支持接入外部 MCP 服务器，扩展工具能力。外部 MCP 工具会自动注册到系统中，AI 可以像使用内置工具一样调用它们。
+
+### 配置方式
+
+#### 方式一：通过 Web 界面配置（推荐）
+
+1. 启动服务器后，访问 Web 界面
+2. 点击右上角的"设置"按钮
+3. 在设置界面中找到"外部 MCP"配置部分
+4. 点击"添加外部 MCP"按钮
+5. 填写配置信息：
+   - **名称**：外部 MCP 服务器的唯一标识（如：`hexstrike-ai`）
+   - **传输模式**：选择 `stdio` 或 `http`
+   - **描述**：可选，用于说明该 MCP 服务器的功能
+   - **超时时间**：工具执行超时时间（秒），默认 300 秒
+   - **启用状态**：是否立即启用该外部 MCP
+6. 根据传输模式填写相应配置：
+   - **stdio 模式**：
+     - **命令**：MCP 服务器的启动命令（如：`python3`）
+     - **参数**：启动参数数组（如：`["/path/to/mcp_server.py", "--arg", "value"]`）
+   - **HTTP 模式**：
+     - **URL**：MCP 服务器的 HTTP 端点地址（如：`http://127.0.0.1:8888`）
+7. 点击"保存"按钮，配置会自动保存到 `config.yaml`
+8. 系统会自动连接外部 MCP 服务器并加载其工具
+
+#### 方式二：直接编辑配置文件
+
+在 `config.yaml` 中添加 `external_mcp` 配置：
+
+```yaml
+# 外部MCP配置
+external_mcp:
+  servers:
+    # 外部MCP服务器名称（唯一标识）
+    hexstrike-ai:
+      # stdio 模式配置
+      command: python3
+      args:
+        - /path/to/hexstrike_mcp.py
+        - --server
+        - 'http://127.0.0.1:8888'
+      
+      # 或 HTTP 模式配置（二选一）
+      # transport: http
+      # url: http://127.0.0.1:8888
+      
+      # 通用配置
+      description: HexStrike AI v6.0 - Advanced Cybersecurity Automation Platform
+      timeout: 300  # 超时时间（秒）
+      external_mcp_enable: true  # 是否启用
+      
+      # 工具级别控制（可选）
+      tool_enabled:
+        nmap_scan: true
+        sqlmap_scan: true
+        # ... 其他工具
+```
+
+### 传输模式说明
+
+#### stdio 模式
+
+通过标准输入输出（stdio）与外部 MCP 服务器通信，适合本地运行的 MCP 服务器。
+
+**配置示例：**
+```yaml
+external_mcp:
+  servers:
+    my-mcp-server:
+      command: python3
+      args:
+        - /path/to/mcp_server.py
+        - --config
+        - /path/to/config.json
+      description: My Custom MCP Server
+      timeout: 300
+      external_mcp_enable: true
+```
+
+**特点：**
+- ✅ 本地进程通信，无需网络端口
+- ✅ 安全性高，数据不经过网络
+- ✅ 适合本地开发和测试
+
+#### HTTP 模式
+
+通过 HTTP 请求与外部 MCP 服务器通信，适合远程 MCP 服务器或需要跨网络访问的场景。
+
+**配置示例：**
+```yaml
+external_mcp:
+  servers:
+    remote-mcp-server:
+      transport: http
+      url: http://192.168.1.100:8888
+      description: Remote MCP Server
+      timeout: 300
+      external_mcp_enable: true
+```
+
+**特点：**
+- ✅ 支持远程访问
+- ✅ 适合分布式部署
+- ✅ 易于集成现有 HTTP 服务
+
+### 工具命名规则
+
+外部 MCP 工具在系统中的名称格式为：`{mcp-server-name}::{tool-name}`
+
+例如：
+- 外部 MCP 服务器名称：`hexstrike-ai`
+- 工具名称：`nmap_scan`
+- 系统内完整工具名：`hexstrike-ai::nmap_scan`
+
+AI 在调用时会自动识别并使用完整工具名。
+
+### 工具启用控制
+
+#### 全局启用/禁用
+
+通过 `external_mcp_enable` 字段控制整个外部 MCP 服务器的启用状态：
+- `true`：启用，系统会自动连接并加载工具
+- `false`：禁用，系统不会连接该服务器
+
+#### 工具级别控制
+
+通过 `tool_enabled` 字段精确控制每个工具的启用状态：
+
+```yaml
+external_mcp:
+  servers:
+    hexstrike-ai:
+      # ... 其他配置
+      tool_enabled:
+        nmap_scan: true      # 启用此工具
+        sqlmap_scan: false   # 禁用此工具
+        nuclei_scan: true    # 启用此工具
+```
+
+- 如果 `tool_enabled` 中未列出某个工具，默认启用
+- 如果某个工具设置为 `false`，该工具不会出现在工具列表中，AI 也无法调用
+
+### 管理外部 MCP
+
+#### 通过 Web 界面管理
+
+1. **查看外部 MCP 列表**：在设置界面中查看所有已配置的外部 MCP 服务器
+2. **启动/停止**：可以随时启动或停止外部 MCP 服务器连接
+3. **编辑配置**：修改外部 MCP 的配置信息
+4. **删除配置**：移除不需要的外部 MCP 服务器
+
+#### 通过 API 管理
+
+- **获取外部 MCP 列表**：`GET /api/external-mcp`
+- **添加外部 MCP**：`POST /api/external-mcp`
+- **更新外部 MCP**：`PUT /api/external-mcp/:name`
+- **删除外部 MCP**：`DELETE /api/external-mcp/:name`
+- **启动外部 MCP**：`POST /api/external-mcp/:name/start`
+- **停止外部 MCP**：`POST /api/external-mcp/:name/stop`
+
+### 监控和统计
+
+外部 MCP 工具的执行记录和统计信息会自动记录到系统中：
+
+- **执行记录**：在"工具监控"页面可以查看所有外部 MCP 工具的执行历史
+- **执行统计**：执行统计面板会显示外部 MCP 工具的调用次数、成功/失败统计
+- **实时监控**：可以实时查看外部 MCP 工具的执行状态
+
+### 故障排除
+
+**问题：外部 MCP 无法连接**
+
+- ✅ 检查 `command` 和 `args` 配置是否正确（stdio 模式）
+- ✅ 检查 `url` 配置是否正确且可访问（HTTP 模式）
+- ✅ 检查外部 MCP 服务器是否正常运行
+- ✅ 查看服务器日志获取详细错误信息
+- ✅ 检查网络连接（HTTP 模式）
+- ✅ 检查防火墙设置（HTTP 模式）
+
+**问题：外部 MCP 工具未显示**
+
+- ✅ 确认 `external_mcp_enable: true`
+- ✅ 检查 `tool_enabled` 配置，确保工具未被禁用
+- ✅ 确认外部 MCP 服务器已成功连接
+- ✅ 查看服务器日志确认工具是否已加载
+
+**问题：外部 MCP 工具执行失败**
+
+- ✅ 检查外部 MCP 服务器是否正常运行
+- ✅ 查看工具执行日志获取详细错误信息
+- ✅ 检查超时时间设置是否合理
+- ✅ 确认外部 MCP 服务器支持的工具调用格式
+
+### 最佳实践
+
+1. **命名规范**：使用有意义的名称标识外部 MCP 服务器，避免冲突
+2. **超时设置**：根据工具执行时间合理设置超时时间
+3. **工具控制**：使用 `tool_enabled` 精确控制需要的工具，避免加载过多无用工具
+4. **安全考虑**：HTTP 模式建议使用内网地址或配置适当的访问控制
+5. **监控管理**：定期检查外部 MCP 的连接状态和执行统计
+
 ## 🛠️ 安全工具支持
 
 ### 工具概览

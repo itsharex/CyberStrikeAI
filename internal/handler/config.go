@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"cyberstrike-ai/internal/config"
 	"cyberstrike-ai/internal/mcp"
@@ -20,13 +22,14 @@ import (
 
 // ConfigHandler 配置处理器
 type ConfigHandler struct {
-	configPath string
-	config     *config.Config
-	mcpServer  *mcp.Server
-	executor   *security.Executor
-	agent      AgentUpdater // Agent接口，用于更新Agent配置
-	logger     *zap.Logger
-	mu         sync.RWMutex
+	configPath    string
+	config        *config.Config
+	mcpServer     *mcp.Server
+	executor      *security.Executor
+	agent         AgentUpdater // Agent接口，用于更新Agent配置
+	externalMCPMgr *mcp.ExternalMCPManager // 外部MCP管理器
+	logger        *zap.Logger
+	mu            sync.RWMutex
 }
 
 // AgentUpdater Agent更新接口
@@ -36,14 +39,15 @@ type AgentUpdater interface {
 }
 
 // NewConfigHandler 创建新的配置处理器
-func NewConfigHandler(configPath string, cfg *config.Config, mcpServer *mcp.Server, executor *security.Executor, agent AgentUpdater, logger *zap.Logger) *ConfigHandler {
+func NewConfigHandler(configPath string, cfg *config.Config, mcpServer *mcp.Server, executor *security.Executor, agent AgentUpdater, externalMCPMgr *mcp.ExternalMCPManager, logger *zap.Logger) *ConfigHandler {
 	return &ConfigHandler{
-		configPath: configPath,
-		config:     cfg,
-		mcpServer:  mcpServer,
-		executor:   executor,
-		agent:      agent,
-		logger:     logger,
+		configPath:     configPath,
+		config:         cfg,
+		mcpServer:      mcpServer,
+		executor:       executor,
+		agent:          agent,
+		externalMCPMgr: externalMCPMgr,
+		logger:         logger,
 	}
 }
 
@@ -60,6 +64,8 @@ type ToolConfigInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled"`
+	IsExternal  bool   `json:"is_external,omitempty"`  // 是否为外部MCP工具
+	ExternalMCP string `json:"external_mcp,omitempty"` // 外部MCP名称（如果是外部工具）
 }
 
 // GetConfig 获取当前配置
@@ -67,13 +73,14 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// 获取工具列表
+	// 获取工具列表（包含内部和外部工具）
 	tools := make([]ToolConfigInfo, 0, len(h.config.Security.Tools))
 	for _, tool := range h.config.Security.Tools {
 		tools = append(tools, ToolConfigInfo{
 			Name:        tool.Name,
 			Description: tool.ShortDescription,
 			Enabled:     tool.Enabled,
+			IsExternal:  false,
 		})
 		// 如果没有简短描述，使用详细描述的前100个字符
 		if tools[len(tools)-1].Description == "" {
@@ -82,6 +89,65 @@ func (h *ConfigHandler) GetConfig(c *gin.Context) {
 				desc = desc[:100] + "..."
 			}
 			tools[len(tools)-1].Description = desc
+		}
+	}
+
+	// 获取外部MCP工具
+	if h.externalMCPMgr != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		externalTools, err := h.externalMCPMgr.GetAllTools(ctx)
+		if err == nil {
+			externalMCPConfigs := h.externalMCPMgr.GetConfigs()
+			for _, externalTool := range externalTools {
+				var mcpName, actualToolName string
+				if idx := strings.Index(externalTool.Name, "::"); idx > 0 {
+					mcpName = externalTool.Name[:idx]
+					actualToolName = externalTool.Name[idx+2:]
+				} else {
+					continue
+				}
+
+				enabled := false
+				if cfg, exists := externalMCPConfigs[mcpName]; exists {
+					// 首先检查外部MCP是否启用
+					if !cfg.ExternalMCPEnable && !(cfg.Enabled && !cfg.Disabled) {
+						enabled = false // MCP未启用，所有工具都禁用
+					} else {
+						// MCP已启用，检查单个工具的启用状态
+						// 如果ToolEnabled为空或未设置该工具，默认为启用（向后兼容）
+						if cfg.ToolEnabled == nil {
+							enabled = true // 未设置工具状态，默认为启用
+						} else if toolEnabled, exists := cfg.ToolEnabled[actualToolName]; exists {
+							enabled = toolEnabled // 使用配置的工具状态
+						} else {
+							enabled = true // 工具未在配置中，默认为启用
+						}
+					}
+				}
+
+				client, exists := h.externalMCPMgr.GetClient(mcpName)
+				if !exists || !client.IsConnected() {
+					enabled = false
+				}
+
+				description := externalTool.ShortDescription
+				if description == "" {
+					description = externalTool.Description
+				}
+				if len(description) > 100 {
+					description = description[:100] + "..."
+				}
+
+				tools = append(tools, ToolConfigInfo{
+					Name:        actualToolName,
+					Description: description,
+					Enabled:     enabled,
+					IsExternal:  true,
+					ExternalMCP: mcpName,
+				})
+			}
 		}
 	}
 
@@ -128,13 +194,14 @@ func (h *ConfigHandler) GetTools(c *gin.Context) {
 		searchTermLower = strings.ToLower(searchTerm)
 	}
 
-	// 获取所有工具并应用搜索过滤
+	// 获取所有内部工具并应用搜索过滤
 	allTools := make([]ToolConfigInfo, 0, len(h.config.Security.Tools))
 	for _, tool := range h.config.Security.Tools {
 		toolInfo := ToolConfigInfo{
 			Name:        tool.Name,
 			Description: tool.ShortDescription,
 			Enabled:     tool.Enabled,
+			IsExternal:  false,
 		}
 		// 如果没有简短描述，使用详细描述的前100个字符
 		if toolInfo.Description == "" {
@@ -155,6 +222,81 @@ func (h *ConfigHandler) GetTools(c *gin.Context) {
 		}
 
 		allTools = append(allTools, toolInfo)
+	}
+
+	// 获取外部MCP工具
+	if h.externalMCPMgr != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		externalTools, err := h.externalMCPMgr.GetAllTools(ctx)
+		if err != nil {
+			h.logger.Warn("获取外部MCP工具失败", zap.Error(err))
+		} else {
+			// 获取外部MCP配置，用于判断启用状态
+			externalMCPConfigs := h.externalMCPMgr.GetConfigs()
+			
+			for _, externalTool := range externalTools {
+				// 解析工具名称：mcpName::toolName
+				var mcpName, actualToolName string
+				if idx := strings.Index(externalTool.Name, "::"); idx > 0 {
+					mcpName = externalTool.Name[:idx]
+					actualToolName = externalTool.Name[idx+2:]
+				} else {
+					continue // 跳过格式不正确的工具
+				}
+
+				// 获取外部工具的启用状态
+				enabled := false
+				if cfg, exists := externalMCPConfigs[mcpName]; exists {
+					// 首先检查外部MCP是否启用
+					if !cfg.ExternalMCPEnable && !(cfg.Enabled && !cfg.Disabled) {
+						enabled = false // MCP未启用，所有工具都禁用
+					} else {
+						// MCP已启用，检查单个工具的启用状态
+						// 如果ToolEnabled为空或未设置该工具，默认为启用（向后兼容）
+						if cfg.ToolEnabled == nil {
+							enabled = true // 未设置工具状态，默认为启用
+						} else if toolEnabled, exists := cfg.ToolEnabled[actualToolName]; exists {
+							enabled = toolEnabled // 使用配置的工具状态
+						} else {
+							enabled = true // 工具未在配置中，默认为启用
+						}
+					}
+				}
+
+				// 检查外部MCP是否已连接
+				client, exists := h.externalMCPMgr.GetClient(mcpName)
+				if !exists || !client.IsConnected() {
+					enabled = false // 未连接时视为禁用
+				}
+
+				description := externalTool.ShortDescription
+				if description == "" {
+					description = externalTool.Description
+				}
+				if len(description) > 100 {
+					description = description[:100] + "..."
+				}
+
+				// 如果有关键词，进行搜索过滤
+				if searchTermLower != "" {
+					nameLower := strings.ToLower(actualToolName)
+					descLower := strings.ToLower(description)
+					if !strings.Contains(nameLower, searchTermLower) && !strings.Contains(descLower, searchTermLower) {
+						continue // 不匹配，跳过
+					}
+				}
+
+				allTools = append(allTools, ToolConfigInfo{
+					Name:        actualToolName, // 显示实际工具名称，不带前缀
+					Description: description,
+					Enabled:     enabled,
+					IsExternal:  true,
+					ExternalMCP: mcpName,
+				})
+			}
+		}
 	}
 
 	total := len(allTools)
@@ -196,8 +338,10 @@ type UpdateConfigRequest struct {
 
 // ToolEnableStatus 工具启用状态
 type ToolEnableStatus struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
+	Name        string `json:"name"`
+	Enabled     bool   `json:"enabled"`
+	IsExternal  bool   `json:"is_external,omitempty"`  // 是否为外部MCP工具
+	ExternalMCP string `json:"external_mcp,omitempty"` // 外部MCP名称（如果是外部工具）
 }
 
 // UpdateConfig 更新配置
@@ -240,19 +384,107 @@ func (h *ConfigHandler) UpdateConfig(c *gin.Context) {
 
 	// 更新工具启用状态
 	if req.Tools != nil {
-		toolMap := make(map[string]bool)
+		// 分离内部工具和外部工具
+		internalToolMap := make(map[string]bool)
+		// 外部工具状态：MCP名称 -> 工具名称 -> 启用状态
+		externalMCPToolMap := make(map[string]map[string]bool)
+
 		for _, toolStatus := range req.Tools {
-			toolMap[toolStatus.Name] = toolStatus.Enabled
+			if toolStatus.IsExternal && toolStatus.ExternalMCP != "" {
+				// 外部工具：保存每个工具的独立状态
+				mcpName := toolStatus.ExternalMCP
+				if externalMCPToolMap[mcpName] == nil {
+					externalMCPToolMap[mcpName] = make(map[string]bool)
+				}
+				externalMCPToolMap[mcpName][toolStatus.Name] = toolStatus.Enabled
+			} else {
+				// 内部工具
+				internalToolMap[toolStatus.Name] = toolStatus.Enabled
+			}
 		}
 
-		// 更新配置中的工具状态
+		// 更新内部工具状态
 		for i := range h.config.Security.Tools {
-			if enabled, ok := toolMap[h.config.Security.Tools[i].Name]; ok {
+			if enabled, ok := internalToolMap[h.config.Security.Tools[i].Name]; ok {
 				h.config.Security.Tools[i].Enabled = enabled
 				h.logger.Info("更新工具启用状态",
 					zap.String("tool", h.config.Security.Tools[i].Name),
 					zap.Bool("enabled", enabled),
 				)
+			}
+		}
+
+		// 更新外部MCP工具状态
+		if h.externalMCPMgr != nil {
+			for mcpName, toolStates := range externalMCPToolMap {
+				// 更新配置中的工具启用状态
+				if h.config.ExternalMCP.Servers == nil {
+					h.config.ExternalMCP.Servers = make(map[string]config.ExternalMCPServerConfig)
+				}
+				cfg, exists := h.config.ExternalMCP.Servers[mcpName]
+				if !exists {
+					h.logger.Warn("外部MCP配置不存在", zap.String("mcp", mcpName))
+					continue
+				}
+				
+				// 初始化ToolEnabled map
+				if cfg.ToolEnabled == nil {
+					cfg.ToolEnabled = make(map[string]bool)
+				}
+				
+				// 更新每个工具的启用状态
+				for toolName, enabled := range toolStates {
+					cfg.ToolEnabled[toolName] = enabled
+					h.logger.Info("更新外部工具启用状态",
+						zap.String("mcp", mcpName),
+						zap.String("tool", toolName),
+						zap.Bool("enabled", enabled),
+					)
+				}
+				
+				// 检查是否有任何工具启用，如果有则启用MCP
+				hasEnabledTool := false
+				for _, enabled := range cfg.ToolEnabled {
+					if enabled {
+						hasEnabledTool = true
+						break
+					}
+				}
+				
+				// 如果MCP之前未启用，但现在有工具启用，则启用MCP
+				// 如果MCP之前已启用，保持启用状态（允许部分工具禁用）
+				if !cfg.ExternalMCPEnable && hasEnabledTool {
+					cfg.ExternalMCPEnable = true
+					h.logger.Info("自动启用外部MCP（因为有工具启用）", zap.String("mcp", mcpName))
+				}
+				
+				h.config.ExternalMCP.Servers[mcpName] = cfg
+			}
+			
+			// 同步更新 externalMCPMgr 中的配置，确保 GetConfigs() 返回最新配置
+			// 在循环外部统一更新，避免重复调用
+			h.externalMCPMgr.LoadConfigs(&h.config.ExternalMCP)
+			
+			// 处理MCP连接状态
+			for mcpName := range externalMCPToolMap {
+				cfg := h.config.ExternalMCP.Servers[mcpName]
+				// 如果MCP需要启用，确保客户端已启动
+				if cfg.ExternalMCPEnable {
+					// 启动外部MCP（如果未启动）
+					client, exists := h.externalMCPMgr.GetClient(mcpName)
+					if !exists || !client.IsConnected() {
+						if err := h.externalMCPMgr.StartClient(mcpName); err != nil {
+							h.logger.Warn("启动外部MCP失败",
+								zap.String("mcp", mcpName),
+								zap.Error(err),
+							)
+						} else {
+							h.logger.Info("启动外部MCP",
+								zap.String("mcp", mcpName),
+							)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -318,6 +550,33 @@ func (h *ConfigHandler) saveConfig() error {
 	updateAgentConfig(root, h.config.Agent.MaxIterations)
 	updateMCPConfig(root, h.config.MCP)
 	updateOpenAIConfig(root, h.config.OpenAI)
+	// 更新外部MCP配置（使用external_mcp.go中的函数，同一包中可直接调用）
+	// 读取原始配置以保持向后兼容
+	originalConfigs := make(map[string]map[string]bool)
+	externalMCPNode := findMapValue(root, "external_mcp")
+	if externalMCPNode != nil && externalMCPNode.Kind == yaml.MappingNode {
+		serversNode := findMapValue(externalMCPNode, "servers")
+		if serversNode != nil && serversNode.Kind == yaml.MappingNode {
+			for i := 0; i < len(serversNode.Content); i += 2 {
+				if i+1 >= len(serversNode.Content) {
+					break
+				}
+				nameNode := serversNode.Content[i]
+				serverNode := serversNode.Content[i+1]
+				if nameNode.Kind == yaml.ScalarNode && serverNode.Kind == yaml.MappingNode {
+					serverName := nameNode.Value
+					originalConfigs[serverName] = make(map[string]bool)
+					if enabledVal := findBoolInMap(serverNode, "enabled"); enabledVal != nil {
+						originalConfigs[serverName]["enabled"] = *enabledVal
+					}
+					if disabledVal := findBoolInMap(serverNode, "disabled"); disabledVal != nil {
+						originalConfigs[serverName]["disabled"] = *disabledVal
+					}
+				}
+			}
+		}
+	}
+	updateExternalMCPConfig(root, h.config.ExternalMCP, originalConfigs)
 
 	if err := writeYAMLDocument(h.configPath, root); err != nil {
 		return fmt.Errorf("保存配置文件失败: %w", err)
@@ -502,6 +761,34 @@ func setIntInMap(mapNode *yaml.Node, key string, value int) {
 	valueNode.Tag = "!!int"
 	valueNode.Style = 0
 	valueNode.Value = fmt.Sprintf("%d", value)
+}
+
+func findBoolInMap(mapNode *yaml.Node, key string) *bool {
+	if mapNode == nil || mapNode.Kind != yaml.MappingNode {
+		return nil
+	}
+	
+	for i := 0; i < len(mapNode.Content); i += 2 {
+		if i+1 >= len(mapNode.Content) {
+			break
+		}
+		keyNode := mapNode.Content[i]
+		valueNode := mapNode.Content[i+1]
+		
+		if keyNode.Kind == yaml.ScalarNode && keyNode.Value == key {
+			if valueNode.Kind == yaml.ScalarNode {
+				if valueNode.Value == "true" {
+					result := true
+					return &result
+				} else if valueNode.Value == "false" {
+					result := false
+					return &result
+				}
+			}
+			return nil
+		}
+	}
+	return nil
 }
 
 func setBoolInMap(mapNode *yaml.Node, key string, value bool) {

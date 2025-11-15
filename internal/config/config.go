@@ -12,14 +12,15 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `yaml:"server"`
-	Log      LogConfig      `yaml:"log"`
-	MCP      MCPConfig      `yaml:"mcp"`
-	OpenAI   OpenAIConfig   `yaml:"openai"`
-	Agent    AgentConfig    `yaml:"agent"`
-	Security SecurityConfig `yaml:"security"`
-	Database DatabaseConfig `yaml:"database"`
-	Auth     AuthConfig     `yaml:"auth"`
+	Server      ServerConfig        `yaml:"server"`
+	Log         LogConfig           `yaml:"log"`
+	MCP         MCPConfig           `yaml:"mcp"`
+	OpenAI      OpenAIConfig        `yaml:"openai"`
+	Agent       AgentConfig         `yaml:"agent"`
+	Security    SecurityConfig      `yaml:"security"`
+	Database    DatabaseConfig      `yaml:"database"`
+	Auth        AuthConfig          `yaml:"auth"`
+	ExternalMCP ExternalMCPConfig   `yaml:"external_mcp,omitempty"`
 }
 
 type ServerConfig struct {
@@ -63,6 +64,32 @@ type AuthConfig struct {
 	GeneratedPassword           string `yaml:"-" json:"-"`
 	GeneratedPasswordPersisted  bool   `yaml:"-" json:"-"`
 	GeneratedPasswordPersistErr string `yaml:"-" json:"-"`
+}
+
+// ExternalMCPConfig 外部MCP配置
+type ExternalMCPConfig struct {
+	Servers map[string]ExternalMCPServerConfig `yaml:"servers,omitempty" json:"servers,omitempty"`
+}
+
+// ExternalMCPServerConfig 外部MCP服务器配置
+type ExternalMCPServerConfig struct {
+	// stdio模式配置
+	Command     string   `yaml:"command,omitempty" json:"command,omitempty"`
+	Args        []string `yaml:"args,omitempty" json:"args,omitempty"`
+	
+	// HTTP模式配置
+	Transport   string   `yaml:"transport,omitempty" json:"transport,omitempty"` // "http" 或 "stdio"
+	URL         string   `yaml:"url,omitempty" json:"url,omitempty"`
+	
+	// 通用配置
+	Description      string `yaml:"description,omitempty" json:"description,omitempty"`
+	Timeout          int    `yaml:"timeout,omitempty" json:"timeout,omitempty"` // 超时时间（秒）
+	ExternalMCPEnable bool  `yaml:"external_mcp_enable,omitempty" json:"external_mcp_enable,omitempty"` // 是否启用外部MCP
+	ToolEnabled      map[string]bool `yaml:"tool_enabled,omitempty" json:"tool_enabled,omitempty"` // 每个工具的启用状态（工具名称 -> 是否启用）
+	
+	// 向后兼容字段（已废弃，保留用于读取旧配置）
+	Enabled  bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`   // 已废弃，使用 external_mcp_enable
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"` // 已废弃，使用 external_mcp_enable
 }
 type ToolConfig struct {
 	Name             string            `yaml:"name"`
@@ -150,6 +177,27 @@ func Load(path string) (*Config, error) {
 		}
 
 		cfg.Security.Tools = tools
+	}
+
+	// 迁移外部MCP配置：将旧的 enabled/disabled 字段迁移到 external_mcp_enable
+	if cfg.ExternalMCP.Servers != nil {
+		for name, serverCfg := range cfg.ExternalMCP.Servers {
+			// 如果已经设置了 external_mcp_enable，跳过迁移
+			// 否则从 enabled/disabled 字段迁移
+			// 注意：由于 ExternalMCPEnable 是 bool 类型，零值为 false，所以需要检查是否真的设置了
+			// 这里我们通过检查旧的 enabled/disabled 字段来判断是否需要迁移
+			if serverCfg.Disabled {
+				// 旧配置使用 disabled，迁移到 external_mcp_enable
+				serverCfg.ExternalMCPEnable = false
+			} else if serverCfg.Enabled {
+				// 旧配置使用 enabled，迁移到 external_mcp_enable
+				serverCfg.ExternalMCPEnable = true
+			} else {
+				// 都没有设置，默认为启用
+				serverCfg.ExternalMCPEnable = true
+			}
+			cfg.ExternalMCP.Servers[name] = serverCfg
+		}
 	}
 
 	return &cfg, nil

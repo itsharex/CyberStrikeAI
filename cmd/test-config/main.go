@@ -1,45 +1,57 @@
 package main
 
 import (
-	"cyberstrike-ai/internal/config"
 	"fmt"
 	"os"
+
+	"cyberstrike-ai/internal/config"
 )
 
 func main() {
-	cfg, err := config.Load("config.yaml")
-	if err != nil {
-		fmt.Printf("❌ 加载配置失败: %v\n", err)
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run cmd/test-config/main.go <config.yaml>")
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ 配置加载成功\n")
-	fmt.Printf("   工具目录: %s\n", cfg.Security.ToolsDir)
-	fmt.Printf("   工具数量: %d\n", len(cfg.Security.Tools))
+	configPath := os.Args[1]
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
 
-	if len(cfg.Security.Tools) > 0 {
-		fmt.Printf("\n   已加载的工具:\n")
-		for _, tool := range cfg.Security.Tools {
-			status := "❌ 禁用"
-			if tool.Enabled {
-				status = "✅ 启用"
-			}
-			shortDesc := tool.ShortDescription
-			if shortDesc == "" {
-				shortDesc = "(无简短描述，将自动提取)"
-			}
-			fmt.Printf("   %s %s\n", status, tool.Name)
-			fmt.Printf("      简短描述: %s\n", shortDesc)
-			if len(tool.Description) > 100 {
-				fmt.Printf("      详细描述: %s...\n", tool.Description[:100])
-			} else {
-				fmt.Printf("      详细描述: %s\n", tool.Description)
-			}
-			fmt.Printf("      参数数量: %d\n", len(tool.Parameters))
-			fmt.Println()
+	if cfg.ExternalMCP.Servers == nil {
+		fmt.Println("No external MCP servers configured")
+		os.Exit(0)
+	}
+
+	fmt.Printf("Found %d external MCP server(s):\n\n", len(cfg.ExternalMCP.Servers))
+
+	for name, srv := range cfg.ExternalMCP.Servers {
+		fmt.Printf("Name: %s\n", name)
+		fmt.Printf("  Transport: %s\n", getTransport(srv))
+		fmt.Printf("  Command: %s\n", srv.Command)
+		if len(srv.Args) > 0 {
+			fmt.Printf("  Args: %v\n", srv.Args)
 		}
-	} else {
-		fmt.Printf("   ⚠️  未加载任何工具\n")
+		fmt.Printf("  URL: %s\n", srv.URL)
+		fmt.Printf("  Description: %s\n", srv.Description)
+		fmt.Printf("  Timeout: %d seconds\n", srv.Timeout)
+		fmt.Printf("  Enabled: %v\n", srv.Enabled)
+		fmt.Printf("  Disabled: %v\n", srv.Disabled)
+		fmt.Println()
 	}
 }
 
+func getTransport(srv config.ExternalMCPServerConfig) string {
+	if srv.Transport != "" {
+		return srv.Transport
+	}
+	if srv.Command != "" {
+		return "stdio"
+	}
+	if srv.URL != "" {
+		return "http"
+	}
+	return "unknown"
+}
