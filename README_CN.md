@@ -4,7 +4,9 @@
 - web模式
   ![详情预览](./img/效果.png)
 - mcp-stdio / mcp-http 模式
-  ![详情预览](./img/mcp-stdio2.png) 
+  ![详情预览](./img/mcp-stdio2.png)
+- 外部MCP接入（兼容mcp-stdio / mcp-http）
+  ![详情预览](./img/外部MCP接入.png)
   
 ## 更新日志
 - 2025.11.15 新增外部 MCP 接入功能：支持接入外部 MCP 服务器扩展工具能力，支持 stdio 和 HTTP 两种传输模式，支持工具级别的启用/禁用控制，提供完整的配置指南和管理接口
