@@ -10,6 +10,7 @@
   ![Preview](./img/mcp-stdio2.png)
 
 ## Changelog
+- 2025.11.15 Added external MCP integration feature: support for integrating external MCP servers to extend tool capabilities, supports both stdio and HTTP transport modes, tool-level enable/disable control, complete configuration guide and management APIs
 - 2025.11.14 Performance optimizations: optimized tool lookup from O(n) to O(1) using index map, added automatic cleanup mechanism for execution records to prevent memory leaks, and added pagination support for database queries
 - 2025.11.13 Added authentication for the web mode, including automatic password generation and in-app password change
 - 2025.11.13 Added `Settings` feature in the frontend
