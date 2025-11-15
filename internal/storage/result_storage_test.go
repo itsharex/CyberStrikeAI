@@ -256,8 +256,8 @@ func TestFileResultStorage_SearchResult(t *testing.T) {
 		t.Fatalf("保存结果失败: %v", err)
 	}
 
-	// 搜索包含"error"的行
-	matchedLines, err := storage.SearchResult(executionID, "error")
+	// 搜索包含"error"的行（简单字符串匹配）
+	matchedLines, err := storage.SearchResult(executionID, "error", false)
 	if err != nil {
 		t.Fatalf("搜索失败: %v", err)
 	}
@@ -274,13 +274,23 @@ func TestFileResultStorage_SearchResult(t *testing.T) {
 	}
 
 	// 测试搜索不存在的关键词
-	noMatch, err := storage.SearchResult(executionID, "nonexistent")
+	noMatch, err := storage.SearchResult(executionID, "nonexistent", false)
 	if err != nil {
 		t.Fatalf("搜索失败: %v", err)
 	}
 
 	if len(noMatch) != 0 {
 		t.Errorf("搜索不存在的关键词应该返回空结果。实际: %d行", len(noMatch))
+	}
+
+	// 测试正则表达式搜索
+	regexMatched, err := storage.SearchResult(executionID, "error.*again", true)
+	if err != nil {
+		t.Fatalf("正则搜索失败: %v", err)
+	}
+
+	if len(regexMatched) != 1 {
+		t.Errorf("正则搜索结果数量不匹配。期望: 1, 实际: %d", len(regexMatched))
 	}
 }
 
@@ -298,8 +308,8 @@ func TestFileResultStorage_FilterResult(t *testing.T) {
 		t.Fatalf("保存结果失败: %v", err)
 	}
 
-	// 过滤包含"warning"的行
-	filteredLines, err := storage.FilterResult(executionID, "warning")
+	// 过滤包含"warning"的行（简单字符串匹配）
+	filteredLines, err := storage.FilterResult(executionID, "warning", false)
 	if err != nil {
 		t.Fatalf("过滤失败: %v", err)
 	}

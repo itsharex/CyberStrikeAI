@@ -53,8 +53,9 @@ func TestAgent_FormatMinimalNotification(t *testing.T) {
 	toolName := "nmap_scan"
 	size := 50000
 	lineCount := 1000
+	filePath := "tmp/test_exec_001.txt"
 	
-	notification := agent.formatMinimalNotification(executionID, toolName, size, lineCount)
+	notification := agent.formatMinimalNotification(executionID, toolName, size, lineCount, filePath)
 	
 	// 验证通知包含必要信息
 	if !strings.Contains(notification, executionID) {
@@ -130,7 +131,8 @@ func TestAgent_ExecuteToolViaMCP_LargeResult(t *testing.T) {
 		
 		// 生成通知
 		lines := strings.Split(resultStr, "\n")
-		notification := agent.formatMinimalNotification(executionID, toolName, resultSize, len(lines))
+		filePath := storage.GetResultPath(executionID)
+		notification := agent.formatMinimalNotification(executionID, toolName, resultSize, len(lines), filePath)
 		
 		// 验证通知格式
 		if !strings.Contains(notification, executionID) {

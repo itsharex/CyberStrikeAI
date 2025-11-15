@@ -15,22 +15,23 @@ import (
 	"cyberstrike-ai/internal/config"
 	"cyberstrike-ai/internal/mcp"
 	"cyberstrike-ai/internal/storage"
+
 	"go.uber.org/zap"
 )
 
 // Agent AI代理
 type Agent struct {
-	openAIClient      *http.Client
-	config            *config.OpenAIConfig
-	agentConfig       *config.AgentConfig
-	mcpServer         *mcp.Server
-	externalMCPMgr    *mcp.ExternalMCPManager // 外部MCP管理器
-	logger            *zap.Logger
-	maxIterations     int
-	resultStorage     ResultStorage // 结果存储
-	largeResultThreshold int        // 大结果阈值（字节）
-	mu                sync.RWMutex // 添加互斥锁以支持并发更新
-	toolNameMapping   map[string]string // 工具名称映射：OpenAI格式 -> 原始格式（用于外部MCP工具）
+	openAIClient         *http.Client
+	config               *config.OpenAIConfig
+	agentConfig          *config.AgentConfig
+	mcpServer            *mcp.Server
+	externalMCPMgr       *mcp.ExternalMCPManager // 外部MCP管理器
+	logger               *zap.Logger
+	maxIterations        int
+	resultStorage        ResultStorage     // 结果存储
+	largeResultThreshold int               // 大结果阈值（字节）
+	mu                   sync.RWMutex      // 添加互斥锁以支持并发更新
+	toolNameMapping      map[string]string // 工具名称映射：OpenAI格式 -> 原始格式（用于外部MCP工具）
 }
 
 // ResultStorage 结果存储接口（直接使用 storage 包的类型）
@@ -38,9 +39,10 @@ type ResultStorage interface {
 	SaveResult(executionID string, toolName string, result string) error
 	GetResult(executionID string) (string, error)
 	GetResultPage(executionID string, page int, limit int) (*storage.ResultPage, error)
-	SearchResult(executionID string, keyword string) ([]string, error)
-	FilterResult(executionID string, filter string) ([]string, error)
+	SearchResult(executionID string, keyword string, useRegex bool) ([]string, error)
+	FilterResult(executionID string, filter string, useRegex bool) ([]string, error)
 	GetResultMetadata(executionID string) (*storage.ResultMetadata, error)
+	GetResultPath(executionID string) string
 	DeleteResult(executionID string) error
 }
 
@@ -50,19 +52,19 @@ func NewAgent(cfg *config.OpenAIConfig, agentCfg *config.AgentConfig, mcpServer 
 	if maxIterations <= 0 {
 		maxIterations = 30
 	}
-	
+
 	// 设置大结果阈值，默认50KB
 	largeResultThreshold := 50 * 1024
 	if agentCfg != nil && agentCfg.LargeResultThreshold > 0 {
 		largeResultThreshold = agentCfg.LargeResultThreshold
 	}
-	
+
 	// 设置结果存储目录，默认tmp
 	resultStorageDir := "tmp"
 	if agentCfg != nil && agentCfg.ResultStorageDir != "" {
 		resultStorageDir = agentCfg.ResultStorageDir
 	}
-	
+
 	// 初始化结果存储
 	var resultStorage ResultStorage
 	if resultStorageDir != "" {
@@ -70,21 +72,21 @@ func NewAgent(cfg *config.OpenAIConfig, agentCfg *config.AgentConfig, mcpServer 
 		// 这里需要在实际使用时初始化
 		// 暂时设为nil，在需要时初始化
 	}
-	
+
 	// 配置HTTP Transport，优化连接管理和超时设置
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   300 * time.Second,
 			KeepAlive: 300 * time.Second,
 		}).DialContext,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 30 * time.Second,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   30 * time.Second,
 		ResponseHeaderTimeout: 60 * time.Minute, // 响应头超时：增加到15分钟，应对大响应
-		DisableKeepAlives:   false, // 启用连接复用
+		DisableKeepAlives:     false,            // 启用连接复用
 	}
-	
+
 	// 增加超时时间到30分钟，以支持长时间运行的AI推理
 	// 特别是当使用流式响应或处理复杂任务时
 	return &Agent{
@@ -92,15 +94,15 @@ func NewAgent(cfg *config.OpenAIConfig, agentCfg *config.AgentConfig, mcpServer 
 			Timeout:   30 * time.Minute, // 从5分钟增加到30分钟
 			Transport: transport,
 		},
-		config:              cfg,
-		agentConfig:         agentCfg,
-		mcpServer:           mcpServer,
-		externalMCPMgr:      externalMCPMgr,
-		logger:              logger,
-		maxIterations:       maxIterations,
-		resultStorage:       resultStorage,
+		config:               cfg,
+		agentConfig:          agentCfg,
+		mcpServer:            mcpServer,
+		externalMCPMgr:       externalMCPMgr,
+		logger:               logger,
+		maxIterations:        maxIterations,
+		resultStorage:        resultStorage,
 		largeResultThreshold: largeResultThreshold,
-		toolNameMapping:     make(map[string]string), // 初始化工具名称映射
+		toolNameMapping:      make(map[string]string), // 初始化工具名称映射
 	}
 }
 
@@ -113,10 +115,10 @@ func (a *Agent) SetResultStorage(storage ResultStorage) {
 
 // ChatMessage 聊天消息
 type ChatMessage struct {
-	Role      string     `json:"role"`
-	Content   string     `json:"content,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string    `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // MarshalJSON 自定义JSON序列化，将tool_calls中的arguments转换为JSON字符串
@@ -149,7 +151,7 @@ func (cm ChatMessage) MarshalJSON() ([]byte, error) {
 				}
 				argsJSON = string(argsBytes)
 			}
-			
+
 			toolCallsJSON[i] = map[string]interface{}{
 				"id":   tc.ID,
 				"type": tc.Type,
@@ -187,15 +189,15 @@ type Choice struct {
 
 // MessageWithTools 带工具调用的消息
 type MessageWithTools struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // Tool OpenAI工具定义
 type Tool struct {
-	Type     string                 `json:"type"`
-	Function FunctionDefinition     `json:"function"`
+	Type     string             `json:"type"`
+	Function FunctionDefinition `json:"function"`
 }
 
 // FunctionDefinition 函数定义
@@ -213,9 +215,9 @@ type Error struct {
 
 // ToolCall 工具调用
 type ToolCall struct {
-	ID       string                 `json:"id"`
-	Type     string                 `json:"type"`
-	Function FunctionCall           `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
 }
 
 // FunctionCall 函数调用
@@ -267,7 +269,7 @@ func (fc *FunctionCall) UnmarshalJSON(data []byte) error {
 
 // AgentLoopResult Agent Loop执行结果
 type AgentLoopResult struct {
-	Response      string
+	Response        string
 	MCPExecutionIDs []string
 }
 
@@ -300,14 +302,14 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 6. 不要因为单个工具失败就停止整个测试流程，尝试其他方法继续完成任务
 
 当工具返回错误时，错误信息会包含在工具响应中，请仔细阅读并做出合理的决策。`
-	
+
 	messages := []ChatMessage{
 		{
 			Role:    "system",
 			Content: systemPrompt,
 		},
 	}
-	
+
 	// 添加历史消息（数据库只保存user和assistant消息）
 	a.logger.Info("处理历史消息",
 		zap.Int("count", len(historyMessages)),
@@ -332,13 +334,13 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 			)
 		}
 	}
-	
+
 	a.logger.Info("构建消息数组",
 		zap.Int("historyMessages", len(historyMessages)),
 		zap.Int("addedMessages", addedCount),
 		zap.Int("totalMessages", len(messages)),
 	)
-	
+
 	// 添加当前用户消息
 	messages = append(messages, ChatMessage{
 		Role:    "user",
@@ -353,7 +355,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 	for i := 0; i < maxIterations; i++ {
 		// 检查是否是最后一次迭代
 		isLastIteration := (i == maxIterations-1)
-		
+
 		// 获取可用工具
 		tools := a.getAvailableTools()
 
@@ -451,13 +453,13 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 				// 发送工具调用开始事件
 				toolArgsJSON, _ := json.Marshal(toolCall.Function.Arguments)
 				sendProgress("tool_call", fmt.Sprintf("正在调用工具: %s", toolCall.Function.Name), map[string]interface{}{
-					"toolName":  toolCall.Function.Name,
-					"arguments": string(toolArgsJSON),
+					"toolName":     toolCall.Function.Name,
+					"arguments":    string(toolArgsJSON),
 					"argumentsObj": toolCall.Function.Arguments,
-					"toolCallId": toolCall.ID,
-					"index":     idx + 1,
-					"total":     len(choice.Message.ToolCalls),
-					"iteration": i + 1,
+					"toolCallId":   toolCall.ID,
+					"index":        idx + 1,
+					"total":        len(choice.Message.ToolCalls),
+					"iteration":    i + 1,
 				})
 
 				// 执行工具
@@ -466,23 +468,23 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 					// 构建详细的错误信息，帮助AI理解问题并做出决策
 					errorMsg := a.formatToolError(toolCall.Function.Name, toolCall.Function.Arguments, err)
 					messages = append(messages, ChatMessage{
-						Role:      "tool",
+						Role:       "tool",
 						ToolCallID: toolCall.ID,
-						Content:   errorMsg,
+						Content:    errorMsg,
 					})
-					
+
 					// 发送工具执行失败事件
 					sendProgress("tool_result", fmt.Sprintf("工具 %s 执行失败", toolCall.Function.Name), map[string]interface{}{
-						"toolName":  toolCall.Function.Name,
-						"success":   false,
-						"isError":   true,
-						"error":     err.Error(),
+						"toolName":   toolCall.Function.Name,
+						"success":    false,
+						"isError":    true,
+						"error":      err.Error(),
 						"toolCallId": toolCall.ID,
-						"index":     idx + 1,
-						"total":     len(choice.Message.ToolCalls),
-						"iteration": i + 1,
+						"index":      idx + 1,
+						"total":      len(choice.Message.ToolCalls),
+						"iteration":  i + 1,
 					})
-					
+
 					a.logger.Warn("工具执行失败，已返回详细错误信息",
 						zap.String("tool", toolCall.Function.Name),
 						zap.Error(err),
@@ -490,33 +492,33 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 				} else {
 					// 即使工具返回了错误结果（IsError=true），也继续处理，让AI决定下一步
 					messages = append(messages, ChatMessage{
-						Role:      "tool",
+						Role:       "tool",
 						ToolCallID: toolCall.ID,
-						Content:   execResult.Result,
+						Content:    execResult.Result,
 					})
 					// 收集执行ID
 					if execResult.ExecutionID != "" {
 						result.MCPExecutionIDs = append(result.MCPExecutionIDs, execResult.ExecutionID)
 					}
-					
+
 					// 发送工具执行成功事件
 					resultPreview := execResult.Result
 					if len(resultPreview) > 200 {
 						resultPreview = resultPreview[:200] + "..."
 					}
 					sendProgress("tool_result", fmt.Sprintf("工具 %s 执行完成", toolCall.Function.Name), map[string]interface{}{
-						"toolName":    toolCall.Function.Name,
-						"success":     !execResult.IsError,
-						"isError":     execResult.IsError,
-						"result":      execResult.Result, // 完整结果
-						"resultPreview": resultPreview,   // 预览结果
-						"executionId": execResult.ExecutionID,
-						"toolCallId":  toolCall.ID,
-						"index":       idx + 1,
-						"total":       len(choice.Message.ToolCalls),
-						"iteration":   i + 1,
+						"toolName":      toolCall.Function.Name,
+						"success":       !execResult.IsError,
+						"isError":       execResult.IsError,
+						"result":        execResult.Result, // 完整结果
+						"resultPreview": resultPreview,     // 预览结果
+						"executionId":   execResult.ExecutionID,
+						"toolCallId":    toolCall.ID,
+						"index":         idx + 1,
+						"total":         len(choice.Message.ToolCalls),
+						"iteration":     i + 1,
 					})
-					
+
 					// 如果工具返回了错误，记录日志但不中断流程
 					if execResult.IsError {
 						a.logger.Warn("工具返回错误结果，但继续处理",
@@ -526,7 +528,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 					}
 				}
 			}
-			
+
 			// 如果是最后一次迭代，执行完工具后要求AI进行总结
 			if isLastIteration {
 				sendProgress("progress", "最后一次迭代：正在生成总结和下一步计划...", nil)
@@ -548,7 +550,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 				// 如果获取总结失败，跳出循环，让后续逻辑处理
 				break
 			}
-			
+
 			continue
 		}
 
@@ -591,7 +593,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 			// 如果都没有内容，跳出循环，让后续逻辑处理
 			break
 		}
-		
+
 		// 如果完成，返回结果
 		if choice.FinishReason == "stop" {
 			sendProgress("progress", "正在生成最终回复...", nil)
@@ -608,7 +610,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 		Content: fmt.Sprintf("已达到最大迭代次数（%d轮）。请总结到目前为止的所有测试结果、发现的问题和已完成的工作。如果需要继续测试，请提供详细的下一步执行计划。请直接回复，不要调用工具。", a.maxIterations),
 	}
 	messages = append(messages, finalSummaryPrompt)
-	
+
 	summaryResponse, err := a.callOpenAI(ctx, messages, []Tool{}) // 不提供工具，强制AI直接回复
 	if err == nil && summaryResponse != nil && len(summaryResponse.Choices) > 0 {
 		summaryChoice := summaryResponse.Choices[0]
@@ -618,7 +620,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 			return result, nil
 		}
 	}
-	
+
 	// 如果无法生成总结，返回友好的提示
 	result.Response = fmt.Sprintf("已达到最大迭代次数（%d轮）。系统已执行了多轮测试，但由于达到迭代上限，无法继续自动执行。建议您查看已执行的工具结果，或提出新的测试请求以继续测试。", a.maxIterations)
 	return result, nil
@@ -629,7 +631,7 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
 func (a *Agent) getAvailableTools() []Tool {
 	// 从MCP服务器获取所有已注册的内部工具
 	mcpTools := a.mcpServer.GetAllTools()
-	
+
 	// 转换为OpenAI格式的工具定义
 	tools := make([]Tool, 0, len(mcpTools))
 	for _, mcpTool := range mcpTools {
@@ -638,10 +640,10 @@ func (a *Agent) getAvailableTools() []Tool {
 		if description == "" {
 			description = mcpTool.Description
 		}
-		
+
 		// 转换schema中的类型为OpenAI标准类型
 		convertedSchema := a.convertSchemaTypes(mcpTool.InputSchema)
-		
+
 		tools = append(tools, Tool{
 			Type: "function",
 			Function: FunctionDefinition{
@@ -651,24 +653,24 @@ func (a *Agent) getAvailableTools() []Tool {
 			},
 		})
 	}
-	
+
 	// 获取外部MCP工具
 	if a.externalMCPMgr != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		
+
 		externalTools, err := a.externalMCPMgr.GetAllTools(ctx)
 		if err != nil {
 			a.logger.Warn("获取外部MCP工具失败", zap.Error(err))
 		} else {
 			// 获取外部MCP配置，用于检查工具启用状态
 			externalMCPConfigs := a.externalMCPMgr.GetConfigs()
-			
+
 			// 清空并重建工具名称映射
 			a.mu.Lock()
 			a.toolNameMapping = make(map[string]string)
 			a.mu.Unlock()
-			
+
 			// 将外部MCP工具添加到工具列表（只添加启用的工具）
 			for _, externalTool := range externalTools {
 				// 解析工具名称：mcpName::toolName
@@ -679,7 +681,7 @@ func (a *Agent) getAvailableTools() []Tool {
 				} else {
 					continue // 跳过格式不正确的工具
 				}
-				
+
 				// 检查工具是否启用
 				enabled := false
 				if cfg, exists := externalMCPConfigs[mcpName]; exists {
@@ -698,30 +700,30 @@ func (a *Agent) getAvailableTools() []Tool {
 						}
 					}
 				}
-				
+
 				// 只添加启用的工具
 				if !enabled {
 					continue
 				}
-				
+
 				// 使用简短描述（如果存在），否则使用详细描述
 				description := externalTool.ShortDescription
 				if description == "" {
 					description = externalTool.Description
 				}
-				
+
 				// 转换schema中的类型为OpenAI标准类型
 				convertedSchema := a.convertSchemaTypes(externalTool.InputSchema)
-				
+
 				// 将工具名称中的 "::" 替换为 "__" 以符合OpenAI命名规范
 				// OpenAI要求工具名称只能包含 [a-zA-Z0-9_-]
 				openAIName := strings.ReplaceAll(externalTool.Name, "::", "__")
-				
+
 				// 保存名称映射关系（OpenAI格式 -> 原始格式）
 				a.mu.Lock()
 				a.toolNameMapping[openAIName] = externalTool.Name
 				a.mu.Unlock()
-				
+
 				tools = append(tools, Tool{
 					Type: "function",
 					Function: FunctionDefinition{
@@ -733,12 +735,12 @@ func (a *Agent) getAvailableTools() []Tool {
 			}
 		}
 	}
-	
+
 	a.logger.Debug("获取可用工具列表",
 		zap.Int("internalTools", len(mcpTools)),
 		zap.Int("totalTools", len(tools)),
 	)
-	
+
 	return tools
 }
 
@@ -747,13 +749,13 @@ func (a *Agent) convertSchemaTypes(schema map[string]interface{}) map[string]int
 	if schema == nil {
 		return schema
 	}
-	
+
 	// 创建新的schema副本
 	converted := make(map[string]interface{})
 	for k, v := range schema {
 		converted[k] = v
 	}
-	
+
 	// 转换properties中的类型
 	if properties, ok := converted["properties"].(map[string]interface{}); ok {
 		convertedProperties := make(map[string]interface{})
@@ -779,7 +781,7 @@ func (a *Agent) convertSchemaTypes(schema map[string]interface{}) map[string]int
 		}
 		converted["properties"] = convertedProperties
 	}
-	
+
 	return converted
 }
 
@@ -834,7 +836,7 @@ func (a *Agent) isRetryableError(err error) bool {
 func (a *Agent) callOpenAI(ctx context.Context, messages []ChatMessage, tools []Tool) (*OpenAIResponse, error) {
 	maxRetries := 3
 	var lastErr error
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		response, err := a.callOpenAISingle(ctx, messages, tools)
 		if err == nil {
@@ -846,14 +848,14 @@ func (a *Agent) callOpenAI(ctx context.Context, messages []ChatMessage, tools []
 			}
 			return response, nil
 		}
-		
+
 		lastErr = err
-		
+
 		// 如果不是可重试的错误，直接返回
 		if !a.isRetryableError(err) {
 			return nil, err
 		}
-		
+
 		// 如果不是最后一次重试，等待后重试
 		if attempt < maxRetries-1 {
 			// 指数退避：2s, 4s, 8s...
@@ -867,7 +869,7 @@ func (a *Agent) callOpenAI(ctx context.Context, messages []ChatMessage, tools []
 				zap.Int("maxRetries", maxRetries),
 				zap.Duration("backoff", backoff),
 			)
-			
+
 			// 检查上下文是否已取消
 			select {
 			case <-ctx.Done():
@@ -877,7 +879,7 @@ func (a *Agent) callOpenAI(ctx context.Context, messages []ChatMessage, tools []
 			}
 		}
 	}
-	
+
 	return nil, fmt.Errorf("重试%d次后仍然失败: %w", maxRetries, lastErr)
 }
 
@@ -924,7 +926,7 @@ func (a *Agent) callOpenAISingle(ctx context.Context, messages []ChatMessage, to
 	// 记录响应头接收时间
 	headerReceiveTime := time.Now()
 	headerReceiveDuration := headerReceiveTime.Sub(requestStartTime)
-	
+
 	a.logger.Debug("收到OpenAI响应头",
 		zap.Int("statusCode", resp.StatusCode),
 		zap.Duration("headerReceiveDuration", headerReceiveDuration),
@@ -934,7 +936,7 @@ func (a *Agent) callOpenAISingle(ctx context.Context, messages []ChatMessage, to
 	// 使用带超时的读取（通过context控制）
 	bodyChan := make(chan []byte, 1)
 	errChan := make(chan error, 1)
-	
+
 	go func() {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -943,7 +945,7 @@ func (a *Agent) callOpenAISingle(ctx context.Context, messages []ChatMessage, to
 		}
 		bodyChan <- body
 	}()
-	
+
 	var body []byte
 	select {
 	case body = <-bodyChan:
@@ -951,7 +953,7 @@ func (a *Agent) callOpenAISingle(ctx context.Context, messages []ChatMessage, to
 		bodyReceiveTime := time.Now()
 		bodyReceiveDuration := bodyReceiveTime.Sub(headerReceiveTime)
 		totalDuration := bodyReceiveTime.Sub(requestStartTime)
-		
+
 		a.logger.Debug("完成读取OpenAI响应体",
 			zap.Int("bodySizeKB", len(body)/1024),
 			zap.Duration("bodyReceiveDuration", bodyReceiveDuration),
@@ -1050,7 +1052,7 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 		// 调用内部MCP工具
 		result, executionID, err = a.mcpServer.CallTool(ctx, toolName, args)
 	}
-	
+
 	// 如果调用失败（如工具不存在），返回友好的错误信息而不是抛出异常
 	if err != nil {
 		errorMsg := fmt.Sprintf(`工具调用失败
@@ -1068,7 +1070,7 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 - 检查工具名称是否正确
 - 尝试使用其他替代工具
 - 如果这是必需的工具，请向用户说明情况`, toolName, err, toolName)
-		
+
 		return &ToolExecutionResult{
 			Result:      errorMsg,
 			ExecutionID: executionID,
@@ -1082,16 +1084,16 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 		resultText.WriteString(content.Text)
 		resultText.WriteString("\n")
 	}
-	
+
 	resultStr := resultText.String()
 	resultSize := len(resultStr)
-	
+
 	// 检测大结果并保存
 	a.mu.RLock()
 	threshold := a.largeResultThreshold
 	storage := a.resultStorage
 	a.mu.RUnlock()
-	
+
 	if resultSize > threshold && storage != nil {
 		// 异步保存大结果
 		go func() {
@@ -1109,11 +1111,15 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 				)
 			}
 		}()
-		
+
 		// 返回最小化通知
 		lines := strings.Split(resultStr, "\n")
-		notification := a.formatMinimalNotification(executionID, toolName, resultSize, len(lines))
-		
+		filePath := ""
+		if storage != nil {
+			filePath = storage.GetResultPath(executionID)
+		}
+		notification := a.formatMinimalNotification(executionID, toolName, resultSize, len(lines), filePath)
+
 		return &ToolExecutionResult{
 			Result:      notification,
 			ExecutionID: executionID,
@@ -1129,20 +1135,53 @@ func (a *Agent) executeToolViaMCP(ctx context.Context, toolName string, args map
 }
 
 // formatMinimalNotification 格式化最小化通知
-func (a *Agent) formatMinimalNotification(executionID string, toolName string, size int, lineCount int) string {
+func (a *Agent) formatMinimalNotification(executionID string, toolName string, size int, lineCount int, filePath string) string {
 	var sb strings.Builder
-	
+
 	sb.WriteString(fmt.Sprintf("工具执行完成。结果已保存（ID: %s）。\n\n", executionID))
 	sb.WriteString("结果信息：\n")
 	sb.WriteString(fmt.Sprintf("  - 工具: %s\n", toolName))
 	sb.WriteString(fmt.Sprintf("  - 大小: %d 字节 (%.2f KB)\n", size, float64(size)/1024))
 	sb.WriteString(fmt.Sprintf("  - 行数: %d 行\n", lineCount))
+	if filePath != "" {
+		sb.WriteString(fmt.Sprintf("  - 文件路径: %s\n", filePath))
+	}
 	sb.WriteString("\n")
-	sb.WriteString("使用以下工具查询完整结果：\n")
+	sb.WriteString("推荐使用 query_execution_result 工具查询完整结果：\n")
 	sb.WriteString(fmt.Sprintf("  - 查询第一页: query_execution_result(execution_id=\"%s\", page=1, limit=100)\n", executionID))
 	sb.WriteString(fmt.Sprintf("  - 搜索关键词: query_execution_result(execution_id=\"%s\", search=\"关键词\")\n", executionID))
 	sb.WriteString(fmt.Sprintf("  - 过滤条件: query_execution_result(execution_id=\"%s\", filter=\"error\")\n", executionID))
-	
+	sb.WriteString(fmt.Sprintf("  - 正则匹配: query_execution_result(execution_id=\"%s\", search=\"\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\", use_regex=true)\n", executionID))
+	sb.WriteString("\n")
+	if filePath != "" {
+		sb.WriteString("如果 query_execution_result 工具不满足需求，也可以使用其他工具处理文件：\n")
+		sb.WriteString("\n")
+		sb.WriteString("**分段读取示例：**\n")
+		sb.WriteString(fmt.Sprintf("  - 查看前100行: exec(command=\"head\", args=[\"-n\", \"100\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 查看后100行: exec(command=\"tail\", args=[\"-n\", \"100\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 查看第50-150行: exec(command=\"sed\", args=[\"-n\", \"50,150p\", \"%s\"])\n", filePath))
+		sb.WriteString("\n")
+		sb.WriteString("**搜索和正则匹配示例：**\n")
+		sb.WriteString(fmt.Sprintf("  - 搜索关键词: exec(command=\"grep\", args=[\"关键词\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 正则匹配IP地址: exec(command=\"grep\", args=[\"-E\", \"\\\\d+\\\\.\\\\d+\\\\.\\\\d+\\\\.\\\\d+\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 不区分大小写搜索: exec(command=\"grep\", args=[\"-i\", \"关键词\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 显示匹配行号: exec(command=\"grep\", args=[\"-n\", \"关键词\", \"%s\"])\n", filePath))
+		sb.WriteString("\n")
+		sb.WriteString("**过滤和统计示例：**\n")
+		sb.WriteString(fmt.Sprintf("  - 统计总行数: exec(command=\"wc\", args=[\"-l\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 过滤包含error的行: exec(command=\"grep\", args=[\"error\", \"%s\"])\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 排除空行: exec(command=\"grep\", args=[\"-v\", \"^$\", \"%s\"])\n", filePath))
+		sb.WriteString("\n")
+		sb.WriteString("**完整读取（不推荐大文件）：**\n")
+		sb.WriteString(fmt.Sprintf("  - 使用 cat 工具: cat(file=\"%s\")\n", filePath))
+		sb.WriteString(fmt.Sprintf("  - 使用 exec 工具: exec(command=\"cat\", args=[\"%s\"])\n", filePath))
+		sb.WriteString("\n")
+		sb.WriteString("**注意：**\n")
+		sb.WriteString("  - 直接读取大文件可能会再次触发大结果保存机制\n")
+		sb.WriteString("  - 建议优先使用分段读取和搜索功能，避免一次性加载整个文件\n")
+		sb.WriteString("  - 正则表达式语法遵循标准 POSIX 正则表达式规范\n")
+	}
+
 	return sb.String()
 }
 
@@ -1180,7 +1219,6 @@ func (a *Agent) formatToolError(toolName string, args map[string]interface{}, er
 2. 如果工具不可用，请尝试使用替代工具
 3. 如果这是系统问题，请向用户说明情况并提供建议
 4. 如果错误信息中包含有用信息，可以基于这些信息继续分析`, toolName, args, err)
-	
+
 	return errorMsg
 }
-

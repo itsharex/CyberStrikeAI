@@ -28,9 +28,10 @@ type ResultStorage interface {
 	SaveResult(executionID string, toolName string, result string) error
 	GetResult(executionID string) (string, error)
 	GetResultPage(executionID string, page int, limit int) (*storage.ResultPage, error)
-	SearchResult(executionID string, keyword string) ([]string, error)
-	FilterResult(executionID string, filter string) ([]string, error)
+	SearchResult(executionID string, keyword string, useRegex bool) ([]string, error)
+	FilterResult(executionID string, filter string, useRegex bool) ([]string, error)
 	GetResultMetadata(executionID string) (*storage.ResultMetadata, error)
+	GetResultPath(executionID string) string
 	DeleteResult(executionID string) error
 }
 
@@ -755,6 +756,11 @@ func (e *Executor) executeQueryExecutionResult(ctx context.Context, args map[str
 		filter = f
 	}
 
+	useRegex := false
+	if r, ok := args["use_regex"].(bool); ok {
+		useRegex = r
+	}
+
 	// 检查结果存储是否可用
 	if e.resultStorage == nil {
 		return &mcp.ToolResult{
@@ -774,7 +780,7 @@ func (e *Executor) executeQueryExecutionResult(ctx context.Context, args map[str
 
 	if search != "" {
 		// 搜索模式
-		matchedLines, err := e.resultStorage.SearchResult(executionID, search)
+		matchedLines, err := e.resultStorage.SearchResult(executionID, search, useRegex)
 		if err != nil {
 			return &mcp.ToolResult{
 				Content: []mcp.Content{
@@ -790,7 +796,7 @@ func (e *Executor) executeQueryExecutionResult(ctx context.Context, args map[str
 		resultPage = paginateLines(matchedLines, page, limit)
 	} else if filter != "" {
 		// 过滤模式
-		filteredLines, err := e.resultStorage.FilterResult(executionID, filter)
+		filteredLines, err := e.resultStorage.FilterResult(executionID, filter, useRegex)
 		if err != nil {
 			return &mcp.ToolResult{
 				Content: []mcp.Content{
@@ -853,9 +859,15 @@ func (e *Executor) executeQueryExecutionResult(ctx context.Context, args map[str
 		sb.WriteString(fmt.Sprintf("提示: 使用 page=%d 查看下一页", resultPage.Page+1))
 		if search != "" {
 			sb.WriteString(fmt.Sprintf("，或使用 search=\"%s\" 继续搜索", search))
+			if useRegex {
+				sb.WriteString(" (正则模式)")
+			}
 		}
 		if filter != "" {
 			sb.WriteString(fmt.Sprintf("，或使用 filter=\"%s\" 继续过滤", filter))
+			if useRegex {
+				sb.WriteString(" (正则模式)")
+			}
 		}
 		sb.WriteString("\n")
 	}
