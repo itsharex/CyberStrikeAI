@@ -25,6 +25,25 @@ CyberStrikeAI is an **AI-native penetration-testing copilot** built in Go. It co
 - 🔗 Attack-chain graph, risk scoring, and step-by-step replay
 - 🔒 Password-protected web UI, audit logs, and SQLite persistence
 
+## Tool Overview
+
+CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
+
+- **Network Scanners** – nmap, masscan, rustscan, arp-scan, nbtscan
+- **Web & App Scanners** – sqlmap, nikto, dirb, gobuster, feroxbuster, ffuf, httpx
+- **Vulnerability Scanners** – nuclei, wpscan, wafw00f, dalfox, xsser
+- **Subdomain Enumeration** – subfinder, amass, findomain, dnsenum, fierce
+- **API Security** – graphql-scanner, arjun, api-fuzzer, api-schema-analyzer
+- **Container Security** – trivy, clair, docker-bench-security, kube-bench, kube-hunter
+- **Cloud Security** – prowler, scout-suite, cloudmapper, pacu, terrascan, checkov
+- **Binary Analysis** – gdb, radare2, ghidra, objdump, strings, binwalk
+- **Exploitation** – metasploit, msfvenom, pwntools, ropper, ropgadget
+- **Password Cracking** – hashcat, john, hashpump
+- **Forensics** – volatility, volatility3, foremost, steghide, exiftool
+- **Post-Exploitation** – linpeas, winpeas, mimikatz, bloodhound, impacket, responder
+- **CTF Utilities** – stegsolve, zsteg, hash-identifier, fcrackzip, pdfcrack, cyberchef
+- **System Helpers** – exec, create-file, delete-file, list-files, modify-file
+
 ## Basic Usage
 
 ### Quick Start
