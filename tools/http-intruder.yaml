@@ -1,69 +1,130 @@
 name: "http-intruder"
-command: "ffuf"
+command: "python3"
+args:
+  - "-c"
+  - |
+    import json
+    import sys
+    import time
+    from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+
+    import requests
+
+    if len(sys.argv) < 3:
+        sys.stderr.write("需要至少URL和载荷\n")
+        sys.exit(1)
+
+    url = sys.argv[1]
+    method = (sys.argv[2] or "GET").upper()
+    location = (sys.argv[3] or "query").lower()
+    params_json = sys.argv[4] if len(sys.argv) > 4 else "{}"
+    payloads_json = sys.argv[5] if len(sys.argv) > 5 else "[]"
+    max_requests = int(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else 0
+
+    try:
+        params_template = json.loads(params_json) if params_json else {}
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"参数模板解析失败: {exc}\n")
+        sys.exit(1)
+
+    try:
+        payloads = json.loads(payloads_json)
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"载荷解析失败: {exc}\n")
+        sys.exit(1)
+
+    if not isinstance(payloads, list) or not payloads:
+        sys.stderr.write("载荷列表不能为空\n")
+        sys.exit(1)
+
+    param_names = list(params_template.keys())
+    if not param_names:
+        sys.stderr.write("参数模板不能为空\n")
+        sys.exit(1)
+
+    session = requests.Session()
+    sent = 0
+
+    def build_query(original_url, data):
+        parsed = urlparse(original_url)
+        existing = {k: v[0] for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
+        existing.update(data)
+        new_query = urlencode(existing, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+
+    for param in param_names:
+        for payload in payloads:
+            if max_requests and sent >= max_requests:
+                break
+            payload_str = str(payload)
+            if location == "query":
+                new_url = build_query(url, {param: payload_str})
+                response = session.request(method, new_url)
+            elif location == "body":
+                body = params_template.copy()
+                body[param] = payload_str
+                response = session.request(method, url, data=body)
+            elif location == "headers":
+                headers = params_template.copy()
+                headers[param] = payload_str
+                response = session.request(method, url, headers=headers)
+            elif location == "cookie":
+                cookies = params_template.copy()
+                cookies[param] = payload_str
+                response = session.request(method, url, cookies=cookies)
+            else:
+                sys.stderr.write(f"不支持的位置: {location}\n")
+                sys.exit(1)
+
+            sent += 1
+            length = len(response.content)
+            print(f"[{sent}] {param} = {payload_str} -> {response.status_code} ({length} bytes)")
+        if max_requests and sent >= max_requests:
+            break
+
+    if sent == 0:
+        sys.stderr.write("未发送任何请求，请检查参数配置。\n")
 enabled: true
-
 short_description: "简单的Intruder（sniper）模糊测试工具"
-
 description: |
-  简单的Intruder（sniper）模糊测试，逐个参数迭代载荷。
-  
-  **主要功能：**
-  - 参数模糊测试
-  - 载荷迭代
-  - 多种位置支持
-  - 批量请求
-  
-  **使用场景：**
-  - 参数模糊测试
-  - 载荷测试
-  - 安全测试
-  - 漏洞发现
-
+  轻量级HTTP“狙击手”模式模糊器，对每个参数逐一替换载荷并记录响应。
 parameters:
   - name: "url"
     type: "string"
     description: "目标URL"
     required: true
-  
+    position: 0
+    format: "positional"
   - name: "method"
     type: "string"
-    description: "HTTP方法"
+    description: "HTTP方法（默认GET）"
     required: false
     default: "GET"
-  
+    position: 1
+    format: "positional"
   - name: "location"
     type: "string"
     description: "载荷位置（query, body, headers, cookie）"
     required: false
     default: "query"
-  
+    position: 2
+    format: "positional"
   - name: "params"
     type: "string"
-    description: "参数列表（JSON格式）"
-    required: false
-  
+    description: "参数模板（JSON字典），指定要模糊的键及默认值"
+    required: true
+    position: 3
+    format: "positional"
   - name: "payloads"
     type: "string"
-    description: "载荷列表（JSON格式）"
-    required: false
-  
+    description: "载荷列表（JSON数组）"
+    required: true
+    position: 4
+    format: "positional"
   - name: "max_requests"
     type: "int"
-    description: "最大请求数"
+    description: "最大请求数（0表示全部）"
     required: false
-    default: 100
-
-  - name: "additional_args"
-    type: "string"
-    description: |
-      额外的http-intruder参数。用于传递未在参数列表中定义的http-intruder选项。
-      
-      **示例值：**
-      - 根据工具特性添加常用参数示例
-      
-      **注意事项：**
-      - 多个参数用空格分隔
-      - 确保参数格式正确，避免命令注入
-      - 此参数会直接追加到命令末尾
-    required: false
+    default: 0
+    position: 5
     format: "positional"

@@ -1,74 +1,85 @@
 name: "responder"
-command: "responder"
+command: "python3"
+args:
+  - "-c"
+  - |
+    import shlex
+    import subprocess
+    import sys
+    import time
+
+    interface = sys.argv[1] if len(sys.argv) > 1 else "eth0"
+    analyze = sys.argv[2].lower() == "true" if len(sys.argv) > 2 else False
+    wpad = sys.argv[3].lower() == "true" if len(sys.argv) > 3 else True
+    fingerprint = sys.argv[4].lower() == "true" if len(sys.argv) > 4 else False
+    duration = int(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] else 300
+    extra = sys.argv[6] if len(sys.argv) > 6 else ""
+
+    cmd = ["responder", "-I", interface]
+    if analyze:
+        cmd.append("-A")
+    if wpad:
+        cmd.append("-w")
+    if fingerprint:
+        cmd.append("-f")
+    if extra:
+        cmd.extend(shlex.split(extra))
+
+    proc = subprocess.Popen(cmd)
+    try:
+        if duration > 0:
+            time.sleep(duration)
+            proc.terminate()
+            proc.wait(timeout=10)
+        else:
+            proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        proc.wait(timeout=10)
 enabled: true
-
 short_description: "LLMNR/NBT-NS/MDNS投毒和凭据收集工具"
-
 description: |
-  Responder是一个LLMNR/NBT-NS/MDNS投毒工具，用于收集网络凭据。
-  
-  **主要功能：**
-  - LLMNR/NBT-NS投毒
-  - 凭据收集
-  - WPAD代理
-  - 指纹识别
-  
-  **使用场景：**
-  - 网络渗透测试
-  - 凭据收集
-  - 横向移动
-  - 安全测试
-
+  封装 Responder，支持自动在指定持续时间后停止进程，避免占用网络。
 parameters:
   - name: "interface"
     type: "string"
-    description: "网络接口"
+    description: "网络接口（-I）"
     required: false
-    flag: "-I"
-    format: "flag"
     default: "eth0"
-  
+    position: 0
+    format: "positional"
   - name: "analyze"
     type: "bool"
-    description: "仅分析模式"
+    description: "仅分析模式（-A）"
     required: false
-    flag: "-A"
-    format: "flag"
     default: false
-  
+    position: 1
+    format: "positional"
   - name: "wpad"
     type: "bool"
-    description: "启用WPAD恶意代理"
+    description: "启用WPAD恶意代理（-w）"
     required: false
-    flag: "-w"
-    format: "flag"
     default: true
-  
+    position: 2
+    format: "positional"
   - name: "fingerprint"
     type: "bool"
-    description: "指纹识别模式"
+    description: "指纹识别模式（-f）"
     required: false
-    flag: "-f"
-    format: "flag"
     default: false
-  
+    position: 3
+    format: "positional"
   - name: "duration"
     type: "int"
-    description: "运行持续时间（秒）"
+    description: "运行持续时间（秒，0表示直到手动停止）"
     required: false
     default: 300
-
+    position: 4
+    format: "positional"
   - name: "additional_args"
     type: "string"
-    description: |
-      额外的responder参数。用于传递未在参数列表中定义的responder选项。
-      
-      **示例值：**
-      - 根据工具特性添加常用参数示例
-      
-      **注意事项：**
-      - 多个参数用空格分隔
-      - 确保参数格式正确，避免命令注入
-      - 此参数会直接追加到命令末尾
+    description: "额外的Responder参数（直接追加）"
     required: false
+    default: ""
+    position: 5
     format: "positional"

@@ -3,238 +3,321 @@ command: "python3"
 args:
   - "-c"
   - |
-      import argparse
-      import json
-      import shlex
-      import subprocess
-      import sys
-      import time
-      import urllib.parse
+    import argparse
+    import json
+    import re
+    import shlex
+    import subprocess
+    import sys
+    import time
+    import urllib.parse
 
-      METRIC_MARKER = "__CYBERSTRIKE_HTTP_METRICS__"
-      METRIC_KEYS = [
-          "dns_lookup",
-          "tcp_connect",
-          "tls_handshake",
-          "pretransfer",
-          "ttfb",
-          "total",
-          "speed_download",
-          "size_download",
-          "http_code",
-          "redirects",
-      ]
+    try:
+        from charset_normalizer import from_bytes as charset_from_bytes
+    except ImportError:
+        charset_from_bytes = None
 
-      def parse_headers(raw: str):
-          if not raw:
-              return []
-          raw = raw.strip()
-          if not raw:
-              return []
-          try:
-              parsed = json.loads(raw)
-              headers = []
-              if isinstance(parsed, dict):
-                  for k, v in parsed.items():
-                      headers.append(f"{k}: {v}")
-                  return headers
-              if isinstance(parsed, list):
-                  for item in parsed:
-                      if isinstance(item, str) and item.strip():
-                          headers.append(item.strip())
-                  if headers:
-                      return headers
-          except json.JSONDecodeError:
-              pass
-          headers = []
-          for line in raw.replace(";", "\n").splitlines():
-              stripped = line.strip()
-              if stripped:
-                  headers.append(stripped)
-          return headers
+    try:
+        import chardet
+    except ImportError:
+        chardet = None
 
-      def parse_additional(raw: str):
-          if not raw:
-              return []
-          try:
-              return shlex.split(raw)
-          except ValueError:
-              return [arg for arg in raw.split() if arg]
+    METRIC_MARKER = "__CYBERSTRIKE_HTTP_METRICS__"
+    METRIC_KEYS = [
+        "dns_lookup",
+        "tcp_connect",
+        "tls_handshake",
+        "pretransfer",
+        "ttfb",
+        "total",
+        "speed_download",
+        "size_download",
+        "http_code",
+        "redirects",
+    ]
 
-      def smart_encode_url(url: str, safe_path="/:@&=%+,$-~", safe_query="/:@&=%+,$-~"):
-          try:
-              parts = urllib.parse.urlsplit(url)
-          except ValueError:
-              return url
-          path = urllib.parse.quote(parts.path or "/", safe=safe_path)
-          query = urllib.parse.quote(parts.query, safe=safe_query)
-          fragment = urllib.parse.quote(parts.fragment, safe=safe_query)
-          return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, fragment))
+    def parse_headers(raw: str):
+        if not raw:
+            return []
+        raw = raw.strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            headers = []
+            if isinstance(parsed, dict):
+                for k, v in parsed.items():
+                    headers.append(f"{k}: {v}")
+                return headers
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, str) and item.strip():
+                        headers.append(item.strip())
+                if headers:
+                    return headers
+        except json.JSONDecodeError:
+            pass
+        headers = []
+        for line in raw.replace(";", "\n").splitlines():
+            stripped = line.strip()
+            if stripped:
+                headers.append(stripped)
+        return headers
 
-      def sanitize_cmd(cmd):
-          return " ".join(shlex.quote(part) for part in cmd)
+    def parse_additional(raw: str):
+        if not raw:
+            return []
+        try:
+            return shlex.split(raw)
+        except ValueError:
+            return [arg for arg in raw.split() if arg]
 
-      def extract_metrics(output: str):
-          if METRIC_MARKER not in output:
-              return output, {}
-          head, tail = output.rsplit(METRIC_MARKER + ":", 1)
-          values = tail.strip().split("|")
-          stats = {}
-          for key, value in zip(METRIC_KEYS, values):
-              stats[key] = value.strip()
-          return head, stats
+    def smart_encode_url(url: str, safe_path="/:@&=%+,$-~", safe_query="/:@&=%+,$-~"):
+        try:
+            parts = urllib.parse.urlsplit(url)
+        except ValueError:
+            return url
+        path = urllib.parse.quote(parts.path or "/", safe=safe_path)
+        query = urllib.parse.quote(parts.query, safe=safe_query)
+        fragment = urllib.parse.quote(parts.fragment, safe=safe_query)
+        return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, fragment))
 
-      def to_float(value):
-          try:
-              return float(value)
-          except (TypeError, ValueError):
-              return None
+    def sanitize_cmd(cmd):
+        return " ".join(shlex.quote(part) for part in cmd)
 
-      parser = argparse.ArgumentParser(description="Enhanced HTTP testing helper")
-      parser.add_argument("--url", required=True)
-      parser.add_argument("--method", default="GET")
-      parser.add_argument("--data", default="")
-      parser.add_argument("--headers", default="")
-      parser.add_argument("--cookies", default="")
-      parser.add_argument("--user-agent", dest="user_agent", default="")
-      parser.add_argument("--proxy", default="")
-      parser.add_argument("--timeout", default="")
-      parser.add_argument("--repeat", type=int, default=1)
-      parser.add_argument("--delay", default="0")
-      parser.add_argument("--additional-args", dest="additional_args", default="")
-      parser.add_argument("--action", default="")
-      parser.add_argument("--include-headers", dest="include_headers", action="store_true")
-      parser.add_argument("--auto-encode-url", dest="auto_encode_url", action="store_true")
-      parser.add_argument("--follow-redirects", dest="follow_redirects", action="store_true")
-      parser.add_argument("--allow-insecure", dest="allow_insecure", action="store_true")
-      parser.add_argument("--verbose-output", dest="verbose_output", action="store_true")
-      parser.add_argument("--show-command", dest="show_command", action="store_true")
-      parser.add_argument("--show-summary", dest="show_summary", action="store_true")
-      args = parser.parse_args()
+    def extract_metrics(output: bytes):
+        marker = (METRIC_MARKER + ":").encode("ascii")
+        if marker not in output:
+            return output, {}
+        head, tail = output.rsplit(marker, 1)
+        try:
+            tail_text = tail.decode("utf-8", errors="ignore")
+        except UnicodeDecodeError:
+            tail_text = ""
+        values = tail_text.strip().split("|")
+        stats = {}
+        for key, value in zip(METRIC_KEYS, values):
+            stats[key] = value.strip()
+        return head, stats
 
-      repeat = max(1, args.repeat)
-      try:
-          delay_between = float(args.delay or "0")
-          if delay_between < 0:
-              delay_between = 0.0
-      except ValueError:
-          delay_between = 0.0
+    def extract_declared_charset(data: bytes):
+        if not data:
+            return ""
+        sample = data[:16384]
+        try:
+            sample_text = sample.decode("iso-8859-1", errors="ignore")
+        except UnicodeDecodeError:
+            return ""
 
-      prepared_url = smart_encode_url(args.url) if args.auto_encode_url else args.url
-      curl_cmd = ["curl", "-sS"]
-      if args.include_headers:
-          curl_cmd.append("-i")
-      if args.verbose_output:
-          curl_cmd.append("-v")
-      method = (args.method or "GET").upper()
-      if method:
-          curl_cmd.extend(["-X", method])
-      if args.cookies:
-          curl_cmd.extend(["-b", args.cookies])
-      if args.user_agent:
-          curl_cmd.extend(["-A", args.user_agent])
-      if args.timeout:
-          curl_cmd.extend(["--max-time", str(args.timeout)])
-      if args.follow_redirects:
-          curl_cmd.append("-L")
-      if args.allow_insecure:
-          curl_cmd.append("-k")
-      if args.proxy:
-          curl_cmd.extend(["-x", args.proxy])
-      for header in parse_headers(args.headers):
-          curl_cmd.extend(["-H", header])
-      if args.data:
-          curl_cmd.extend(["--data", args.data])
-      metrics_template = METRIC_MARKER + ":" + "|".join([
-          "%{time_namelookup}",
-          "%{time_connect}",
-          "%{time_appconnect}",
-          "%{time_pretransfer}",
-          "%{time_starttransfer}",
-          "%{time_total}",
-          "%{speed_download}",
-          "%{size_download}",
-          "%{http_code}",
-          "%{num_redirects}",
-      ])
-      curl_cmd.extend(["-w", f"\n{metrics_template}\n"])
-      if args.additional_args:
-          curl_cmd.extend(parse_additional(args.additional_args))
-      curl_cmd.append(prepared_url)
+        for line in sample_text.splitlines():
+            lowered = line.lower()
+            if "content-type:" in lowered and "charset=" in lowered:
+                charset_index = lowered.index("charset=") + len("charset=")
+                remainder = line[charset_index:]
+                for separator in [";", " ", "\t"]:
+                    remainder = remainder.split(separator)[0]
+                return remainder.strip().strip('"').strip("'")
 
-      aggregate = {key: [] for key in METRIC_KEYS} if args.show_summary else None
-      if aggregate is not None:
-          aggregate["wall_time"] = []
-      exit_code = 0
+        meta_match = re.search(r'charset=["\']?([a-zA-Z0-9_\-.:]+)', sample_text, re.IGNORECASE)
+        if meta_match:
+            return meta_match.group(1)
+        return ""
 
-      for run_index in range(repeat):
-          if run_index > 0 and delay_between > 0:
-              time.sleep(delay_between)
+    def decode_body_bytes(data: bytes, user_encoding: str = ""):
+        declared = extract_declared_charset(data)
+        attempts = []
+        if user_encoding:
+            attempts.append(("user", user_encoding))
+        if declared:
+            attempts.append(("declared", declared))
 
-          run_cmd = list(curl_cmd)
-          start = time.perf_counter()
-          proc = subprocess.run(
-              run_cmd,
-              capture_output=True,
-              text=True,
-              encoding="utf-8",
-              errors="replace",
-          )
-          elapsed = time.perf_counter() - start
-          body, stats = extract_metrics(proc.stdout)
+        for source, encoding in attempts:
+            enc = (encoding or "").strip()
+            if not enc:
+                continue
+            try:
+                return data.decode(enc), enc, source
+            except (LookupError, UnicodeDecodeError):
+                continue
 
-          print(f"\n===== Response #{run_index + 1} =====")
-          output_body = body.rstrip()
-          if output_body:
-              print(output_body)
-          else:
-              print("[no body]")
+        if charset_from_bytes is not None and data:
+            best = charset_from_bytes(data).best()
+            if best and best.encoding:
+                try:
+                    return data.decode(best.encoding), best.encoding, "detected"
+                except (LookupError, UnicodeDecodeError):
+                    pass
 
-          print(f"\n----- Meta #{run_index + 1} -----")
-          if args.show_command and run_index == 0:
-              print("Command:", sanitize_cmd(run_cmd))
-          if args.show_summary:
-              if stats:
-                  for key in METRIC_KEYS:
-                      label = key.replace("_", " ").title()
-                      print(f"{label}: {stats.get(key, 'n/a')}")
-                      value = to_float(stats.get(key))
-                      if value is not None and aggregate is not None:
-                          aggregate[key].append(value)
-              else:
-                  print("Timing data unavailable (curl -w output missing).")
-              print(f"Wall Time (client): {elapsed:.6f}s")
-              if aggregate is not None:
-                  aggregate["wall_time"].append(elapsed)
-          else:
-              print("Summary disabled (--show-summary=false).")
-              print(f"Wall Time (client): {elapsed:.6f}s")
+        if chardet is not None and data:
+            detection = chardet.detect(data)
+            encoding = detection.get("encoding")
+            if encoding:
+                try:
+                    return data.decode(encoding), encoding, "detected"
+                except (LookupError, UnicodeDecodeError):
+                    pass
 
-          if proc.stderr.strip():
-              print("\nstderr:")
-              print(proc.stderr.strip())
+        try:
+            return data.decode("utf-8"), "utf-8", "fallback"
+        except UnicodeDecodeError:
+            return data.decode("utf-8", errors="replace"), "utf-8", "fallback"
 
-          if proc.returncode != 0:
-              exit_code = proc.returncode
+    def to_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
-      if args.show_summary and repeat > 1 and aggregate is not None:
-          def summarize(values):
-              if not values:
-                  return None
-              return (min(values), sum(values)/len(values), max(values))
+    parser = argparse.ArgumentParser(description="Enhanced HTTP testing helper")
+    parser.add_argument("--url", required=True)
+    parser.add_argument("--method", default="GET")
+    parser.add_argument("--data", default="")
+    parser.add_argument("--headers", default="")
+    parser.add_argument("--cookies", default="")
+    parser.add_argument("--user-agent", dest="user_agent", default="")
+    parser.add_argument("--proxy", default="")
+    parser.add_argument("--timeout", default="")
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("--delay", default="0")
+    parser.add_argument("--additional-args", dest="additional_args", default="")
+    parser.add_argument("--action", default="")
+    parser.add_argument("--include-headers", dest="include_headers", action="store_true")
+    parser.add_argument("--auto-encode-url", dest="auto_encode_url", action="store_true")
+    parser.add_argument("--follow-redirects", dest="follow_redirects", action="store_true")
+    parser.add_argument("--allow-insecure", dest="allow_insecure", action="store_true")
+    parser.add_argument("--verbose-output", dest="verbose_output", action="store_true")
+    parser.add_argument("--show-command", dest="show_command", action="store_true")
+    parser.add_argument("--show-summary", dest="show_summary", action="store_true")
+    parser.add_argument("--response-encoding", dest="response_encoding", default="")
+    args = parser.parse_args()
 
-          print("\n===== Aggregate Timing =====")
-          for key, values in aggregate.items():
-              summary = summarize(values)
-              if not summary:
-                  continue
-              label = key.replace("_", " ").title()
-              min_v, avg_v, max_v = summary
-              print(f"{label}: min {min_v:.6f}s | avg {avg_v:.6f}s | max {max_v:.6f}s")
+    repeat = max(1, args.repeat)
+    try:
+        delay_between = float(args.delay or "0")
+        if delay_between < 0:
+            delay_between = 0.0
+    except ValueError:
+        delay_between = 0.0
 
-      if exit_code != 0:
-          sys.exit(exit_code)
-      sys.exit(0)
+    prepared_url = smart_encode_url(args.url) if args.auto_encode_url else args.url
+    curl_cmd = ["curl", "-sS"]
+    if args.include_headers:
+        curl_cmd.append("-i")
+    if args.verbose_output:
+        curl_cmd.append("-v")
+    method = (args.method or "GET").upper()
+    if method:
+        curl_cmd.extend(["-X", method])
+    if args.cookies:
+        curl_cmd.extend(["-b", args.cookies])
+    if args.user_agent:
+        curl_cmd.extend(["-A", args.user_agent])
+    if args.timeout:
+        curl_cmd.extend(["--max-time", str(args.timeout)])
+    if args.follow_redirects:
+        curl_cmd.append("-L")
+    if args.allow_insecure:
+        curl_cmd.append("-k")
+    if args.proxy:
+        curl_cmd.extend(["-x", args.proxy])
+    for header in parse_headers(args.headers):
+        curl_cmd.extend(["-H", header])
+    if args.data:
+        curl_cmd.extend(["--data", args.data])
+    metrics_template = METRIC_MARKER + ":" + "|".join([
+        "%{time_namelookup}",
+        "%{time_connect}",
+        "%{time_appconnect}",
+        "%{time_pretransfer}",
+        "%{time_starttransfer}",
+        "%{time_total}",
+        "%{speed_download}",
+        "%{size_download}",
+        "%{http_code}",
+        "%{num_redirects}",
+    ])
+    curl_cmd.extend(["-w", f"\n{metrics_template}\n"])
+    if args.additional_args:
+        curl_cmd.extend(parse_additional(args.additional_args))
+    curl_cmd.append(prepared_url)
+
+    aggregate = {key: [] for key in METRIC_KEYS} if args.show_summary else None
+    if aggregate is not None:
+        aggregate["wall_time"] = []
+    exit_code = 0
+
+    for run_index in range(repeat):
+        if run_index > 0 and delay_between > 0:
+            time.sleep(delay_between)
+
+        run_cmd = list(curl_cmd)
+        start = time.perf_counter()
+        proc = subprocess.run(
+            run_cmd,
+            capture_output=True,
+        )
+        elapsed = time.perf_counter() - start
+        body_bytes, stats = extract_metrics(proc.stdout)
+        decoded_body, used_encoding, encoding_source = decode_body_bytes(
+            body_bytes,
+            user_encoding=args.response_encoding,
+        )
+
+        print(f"\n===== Response #{run_index + 1} =====")
+        output_body = decoded_body.rstrip()
+        if output_body:
+            print(output_body)
+        else:
+            print("[no body]")
+
+        print(f"\n----- Meta #{run_index + 1} -----")
+        if args.show_command and run_index == 0:
+            print("Command:", sanitize_cmd(run_cmd))
+        if args.show_summary:
+            if stats:
+                for key in METRIC_KEYS:
+                    label = key.replace("_", " ").title()
+                    print(f"{label}: {stats.get(key, 'n/a')}")
+                    value = to_float(stats.get(key))
+                    if value is not None and aggregate is not None:
+                        aggregate[key].append(value)
+            else:
+                print("Timing data unavailable (curl -w output missing).")
+            print(f"Wall Time (client): {elapsed:.6f}s")
+            if aggregate is not None:
+                aggregate["wall_time"].append(elapsed)
+        else:
+            print("Summary disabled (--show-summary=false).")
+            print(f"Wall Time (client): {elapsed:.6f}s")
+
+        print(f"Encoding Used: {used_encoding} ({encoding_source})")
+
+        stderr_text = proc.stderr.decode("utf-8", errors="replace").strip()
+        if stderr_text:
+            print("\nstderr:")
+            print(stderr_text)
+
+        if proc.returncode != 0:
+            exit_code = proc.returncode
+
+    if args.show_summary and repeat > 1 and aggregate is not None:
+        def summarize(values):
+            if not values:
+                return None
+            return (min(values), sum(values)/len(values), max(values))
+
+        print("\n===== Aggregate Timing =====")
+        for key, values in aggregate.items():
+            summary = summarize(values)
+            if not summary:
+                continue
+            label = key.replace("_", " ").title()
+            min_v, avg_v, max_v = summary
+            print(f"{label}: min {min_v:.6f}s | avg {avg_v:.6f}s | max {max_v:.6f}s")
+
+    if exit_code != 0:
+        sys.exit(exit_code)
+    sys.exit(0)
 enabled: true
 short_description: "增强的HTTP测试框架（带延时、编码、可观察性）"
 description: |
@@ -244,6 +327,7 @@ description: |
   - 自动URL编码：解决包含空格、引号等字符时curl报错的问题，必要时可手动关闭
   - 时延观测：采集 DNS / TCP / TLS / TTFB / 总耗时，可循环请求计算盲注延时
   - 详细输出：可选响应头、命令、stderr，方便排查
+  - 自动编码识别：支持响应内容编码自动检测，可额外指定强制编码
   - 扩展控制：支持代理、超时、重复次数、延迟间隔及原生curl参数透传
 parameters:
   - name: "url"
@@ -341,6 +425,11 @@ parameters:
     required: false
     default: true
     flag: "--show-summary"
+  - name: "response_encoding"
+    type: "string"
+    description: "强制响应解码使用的编码（默认自动检测，可用于指定GBK等场景）"
+    required: false
+    flag: "--response-encoding"
   - name: "action"
     type: "string"
     description: "保留字段：标识调用意图（request, spider等），当前脚本内部不使用"

@@ -3,28 +3,28 @@ command: "/bin/bash"
 args:
   - "-c"
   - |
-      set -euo pipefail
+    set -euo pipefail
 
-      PACKAGE="$1"
-      ENV_NAME="${2:-default}"
-      ADDITIONAL_ARGS="${3:-}"
+    PACKAGE="$1"
+    ENV_NAME="${2:-default}"
+    ADDITIONAL_ARGS="${3:-}"
 
-      BASE_DIR="${HOME}/.cyberstrike/venvs"
-      ENV_DIR="${BASE_DIR}/${ENV_NAME}"
+    BASE_DIR="${HOME}/.cyberstrike/venvs"
+    ENV_DIR="${BASE_DIR}/${ENV_NAME}"
 
-      mkdir -p "$BASE_DIR"
-      if [ ! -d "$ENV_DIR" ]; then
-        python3 -m venv "$ENV_DIR"
-      fi
+    mkdir -p "$BASE_DIR"
+    if [ ! -d "$ENV_DIR" ]; then
+      python3 -m venv "$ENV_DIR"
+    fi
 
-      # shellcheck disable=SC1090
-      source "$ENV_DIR/bin/activate"
+    # shellcheck disable=SC1090
+    source "$ENV_DIR/bin/activate"
 
-      if [ -n "$ADDITIONAL_ARGS" ]; then
-        pip install "$PACKAGE" $ADDITIONAL_ARGS
-      else
-        pip install "$PACKAGE"
-      fi
+    if [ -n "$ADDITIONAL_ARGS" ]; then
+      pip install "$PACKAGE" $ADDITIONAL_ARGS
+    else
+      pip install "$PACKAGE"
+    fi
   - "_"
 enabled: true
 short_description: "在指定虚拟环境中创建/激活并安装Python依赖"
