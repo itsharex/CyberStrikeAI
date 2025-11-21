@@ -13,7 +13,6 @@ description: |
   **注意事项：**
   - 如果文件很大，结果可能会被保存到存储中
   - 只能读取文本文件，二进制文件可能显示乱码
-
 parameters:
   - name: "file"
     type: "string"
@@ -21,4 +20,3 @@ parameters:
     required: true
     format: "positional"
     position: 0
-
