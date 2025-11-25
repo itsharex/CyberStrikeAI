@@ -53,7 +53,15 @@ CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
    cd CyberStrikeAI-main
    go mod download
    ```
-2. **Configure OpenAI-compatible access**  
+2. **Set up the Python tooling stack (required for the YAML tools directory)**  
+   A large portion of `tools/*.yaml` recipes wrap Python utilities (`api-fuzzer`, `http-framework-test`, `install-python-package`, etc.). Create the project-local virtual environment once and install the shared dependencies:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+   The helper tools automatically detect this `venv` (or any already active `$VIRTUAL_ENV`), so the default `env_name` works out of the box unless you intentionally supply another target.
+3. **Configure OpenAI-compatible access**  
    Either open the in-app `Settings` panel after launch or edit `config.yaml`:
    ```yaml
    openai:
@@ -66,7 +74,7 @@ CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
    security:
      tools_dir: "tools"
    ```
-3. **Install the tooling you need (optional)**
+4. **Install the tooling you need (optional)**
    ```bash
    # macOS
    brew install nmap sqlmap nuclei httpx gobuster feroxbuster subfinder amass
@@ -74,7 +82,7 @@ CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
    sudo apt-get install nmap sqlmap nuclei httpx gobuster feroxbuster
    ```
    AI automatically falls back to alternatives when a tool is missing.
-4. **Launch**
+5. **Launch**
    ```bash
    chmod +x run.sh && ./run.sh
    # or
@@ -82,7 +90,7 @@ CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
    # or
    go build -o cyberstrike-ai cmd/server/main.go
    ```
-5. **Open the console** at http://localhost:8080, log in with the generated password, and start chatting.
+6. **Open the console** at http://localhost:8080, log in with the generated password, and start chatting.
 
 ### Core Workflows
 - **Conversation testing** – Natural-language prompts trigger toolchains with streaming SSE output.
@@ -120,6 +128,44 @@ CyberStrikeAI ships with 100+ curated tools covering the whole kill chain:
 - **Web mode** – ships with HTTP MCP server automatically consumed by the UI.
 - **MCP stdio mode** – `go run cmd/mcp-stdio/main.go` exposes the agent to Cursor/CLI.
 - **External MCP federation** – register third-party MCP servers (HTTP or stdio) from the UI, toggle them per engagement, and monitor their health and call volume in real time.
+
+#### MCP stdio quick start
+1. **Build the binary** (run from the project root):
+   ```bash
+   go build -o cyberstrike-ai-mcp cmd/mcp-stdio/main.go
+   ```
+2. **Wire it up in Cursor**  
+   Open `Settings → Tools & MCP → Add Custom MCP`, pick **Command**, then point to the compiled binary and your config:
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai": {
+         "command": "/absolute/path/to/cyberstrike-ai-mcp",
+         "args": [
+           "--config",
+           "/absolute/path/to/config.yaml"
+         ]
+       }
+     }
+   }
+   ```
+   Replace the paths with your local locations; Cursor will launch the stdio server automatically.
+
+#### MCP HTTP quick start
+1. Ensure `config.yaml` has `mcp.enabled: true` and adjust `mcp.host` / `mcp.port` if you need a non-default binding (localhost:8081 works well for local Cursor usage).
+2. Start the main service (`./run.sh` or `go run cmd/server/main.go`); the MCP endpoint lives at `http://<host>:<port>/mcp`.
+3. In Cursor, choose **Add Custom MCP → HTTP** and set `Base URL` to `http://127.0.0.1:8081/mcp`.
+4. Prefer committing the setup via `.cursor/mcp.json` so teammates can reuse it:
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai-http": {
+         "transport": "http",
+         "url": "http://127.0.0.1:8081/mcp"
+       }
+     }
+   }
+   ```
 
 ### Automation Hooks
 - **REST APIs** – everything the UI uses (auth, conversations, tool runs, monitor) is available over JSON.

@@ -53,7 +53,15 @@ CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内
    cd CyberStrikeAI-main
    go mod download
    ```
-2. **配置模型与鉴权**  
+2. **初始化 Python 虚拟环境（tools 目录所需）**  
+   `tools/*.yaml` 中大量工具（如 `api-fuzzer`、`http-framework-test`、`install-python-package` 等）依赖 Python 生态。首次进入项目根目录时请创建本地虚拟环境并安装依赖：
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
+   两个 Python 专用工具（`install-python-package` 与 `execute-python-script`）会自动检测该 `venv`（或已经激活的 `$VIRTUAL_ENV`），因此默认 `env_name` 即可满足大多数场景。
+3. **配置模型与鉴权**  
    启动后在 Web 端 `Settings` 填写，或直接编辑 `config.yaml`：
    ```yaml
    openai:
@@ -66,7 +74,7 @@ CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内
    security:
      tools_dir: "tools"
    ```
-3. **按需安装安全工具（可选）**
+4. **按需安装安全工具（可选）**
    ```bash
    # macOS
    brew install nmap sqlmap nuclei httpx gobuster feroxbuster subfinder amass
@@ -74,7 +82,7 @@ CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内
    sudo apt-get install nmap sqlmap nuclei httpx gobuster feroxbuster
    ```
    未安装的工具会自动跳过或改用替代方案。
-4. **启动服务**
+5. **启动服务**
    ```bash
    chmod +x run.sh && ./run.sh
    # 或
@@ -82,7 +90,7 @@ CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内
    # 或
    go build -o cyberstrike-ai cmd/server/main.go
    ```
-5. **浏览器访问** http://localhost:8080 ，使用日志中提示的密码登录并开始对话。
+6. **浏览器访问** http://localhost:8080 ，使用日志中提示的密码登录并开始对话。
 
 ### 常用流程
 - **对话测试**：自然语言触发多步工具编排，SSE 实时输出。
@@ -119,6 +127,44 @@ CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内
 - **Web 模式**：自带 HTTP MCP 服务供前端调用。
 - **MCP stdio 模式**：`go run cmd/mcp-stdio/main.go` 可接入 Cursor/命令行。
 - **外部 MCP 联邦**：在设置中注册第三方 MCP（HTTP/stdio），按需启停并实时查看调用统计与健康度。
+
+#### MCP stdio 快速集成
+1. **编译可执行文件**（在项目根目录执行）：
+   ```bash
+   go build -o cyberstrike-ai-mcp cmd/mcp-stdio/main.go
+   ```
+2. **在 Cursor 中配置**  
+   打开 `Settings → Tools & MCP → Add Custom MCP`，选择 **Command**，指定编译后的程序与配置文件：
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai": {
+         "command": "/absolute/path/to/cyberstrike-ai-mcp",
+         "args": [
+           "--config",
+           "/absolute/path/to/config.yaml"
+         ]
+       }
+     }
+   }
+   ```
+   将路径替换成你本地的实际地址，Cursor 会自动启动 stdio 版本的 MCP。
+
+#### MCP HTTP 快速集成
+1. 确认 `config.yaml` 中 `mcp.enabled: true`，按照需要调整 `mcp.host` / `mcp.port`（本地建议 `127.0.0.1:8081`）。
+2. 启动主服务（`./run.sh` 或 `go run cmd/server/main.go`），MCP 端点默认暴露在 `http://<host>:<port>/mcp`。
+3. 在 Cursor 内 `Add Custom MCP → HTTP`，将 `Base URL` 设置为 `http://127.0.0.1:8081/mcp`。
+4. 也可以在项目根目录创建 `.cursor/mcp.json` 以便团队共享：
+   ```json
+   {
+     "mcpServers": {
+       "cyberstrike-ai-http": {
+         "transport": "http",
+         "url": "http://127.0.0.1:8081/mcp"
+       }
+     }
+   }
+   ```
 
 ### 自动化与安全
 - **REST API**：认证、会话、任务、监控等接口全部开放，可与 CI/CD 集成。
