@@ -10,9 +10,39 @@ args:
     ADDITIONAL_ARGS="${3:-}"
 
     BASE_DIR="${HOME}/.cyberstrike/venvs"
-    ENV_DIR="${BASE_DIR}/${ENV_NAME}"
 
-    mkdir -p "$BASE_DIR"
+    detect_project_root() {
+      if [ -n "${CYBERSTRIKE_ROOT:-}" ] && [ -d "${CYBERSTRIKE_ROOT}" ]; then
+        printf '%s\n' "${CYBERSTRIKE_ROOT}"
+        return
+      fi
+      if command -v git >/dev/null 2>&1; then
+        local root_path
+        if root_path=$(git rev-parse --show-toplevel 2>/dev/null); then
+          printf '%s\n' "$root_path"
+          return
+        fi
+      fi
+      printf '%s\n' "$(pwd)"
+    }
+
+    resolve_env_dir() {
+      local requested="$1"
+      if [ -n "${VIRTUAL_ENV:-}" ] && { [ -z "$requested" ] || [ "$requested" = "default" ]; }; then
+        printf '%s\n' "$VIRTUAL_ENV"
+        return
+      fi
+      if [ -z "$requested" ] || [ "$requested" = "default" ]; then
+        local root
+        root="$(detect_project_root)"
+        printf '%s/venv\n' "$root"
+        return
+      fi
+      printf '%s/%s\n' "$BASE_DIR" "$requested"
+    }
+
+    ENV_DIR="$(resolve_env_dir "$ENV_NAME")"
+    mkdir -p "$(dirname "$ENV_DIR")"
     if [ ! -d "$ENV_DIR" ]; then
       python3 -m venv "$ENV_DIR"
     fi
