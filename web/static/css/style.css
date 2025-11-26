@@ -1281,6 +1281,11 @@ header {
     background: rgba(220, 53, 69, 0.05);
 }
 
+.detail-success-wrapper {
+    border-color: rgba(40, 167, 69, 0.4);
+    background: rgba(40, 167, 69, 0.03);
+}
+
 .code-block {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
@@ -1301,6 +1306,11 @@ header {
     background: #fff5f5;
     border-color: var(--error-color);
     color: var(--error-color);
+}
+
+.code-block.success {
+    background: rgba(40, 167, 69, 0.05);
+    border-color: var(--success-color);
 }
 
 .btn-ghost {

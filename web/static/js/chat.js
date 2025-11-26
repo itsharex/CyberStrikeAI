@@ -844,24 +844,66 @@ async function showMCPDetail(executionId) {
             };
             document.getElementById('detail-request').textContent = JSON.stringify(requestData, null, 2);
             
-            // 响应结果
+            // 响应结果 + 正确信息 / 错误信息
+            const responseElement = document.getElementById('detail-response');
+            const successSection = document.getElementById('detail-success-section');
+            const successElement = document.getElementById('detail-success');
+            const errorSection = document.getElementById('detail-error-section');
+            const errorElement = document.getElementById('detail-error');
+
+            // 重置状态
+            responseElement.className = 'code-block';
+            responseElement.textContent = '';
+            if (successSection && successElement) {
+                successSection.style.display = 'none';
+                successElement.textContent = '';
+            }
+            if (errorSection && errorElement) {
+                errorSection.style.display = 'none';
+                errorElement.textContent = '';
+            }
+
             if (exec.result) {
                 const responseData = {
                     content: exec.result.content,
                     isError: exec.result.isError
                 };
-                document.getElementById('detail-response').textContent = JSON.stringify(responseData, null, 2);
-                document.getElementById('detail-response').className = exec.result.isError ? 'code-block error' : 'code-block';
+                responseElement.textContent = JSON.stringify(responseData, null, 2);
+
+                if (exec.result.isError) {
+                    // 错误场景：响应结果标红 + 错误信息区块
+                    responseElement.className = 'code-block error';
+                    if (exec.error && errorSection && errorElement) {
+                        errorSection.style.display = 'block';
+                        errorElement.textContent = exec.error;
+                    }
+                } else {
+                    // 成功场景：响应结果保持普通样式，正确信息单独拎出来
+                    responseElement.className = 'code-block';
+                    if (successSection && successElement) {
+                        successSection.style.display = 'block';
+                        let successText = '';
+                        const content = exec.result.content;
+                        if (typeof content === 'string') {
+                            successText = content;
+                        } else if (Array.isArray(content)) {
+                            const texts = content
+                                .map(item => (item && typeof item === 'object' && typeof item.text === 'string') ? item.text : '')
+                                .filter(Boolean);
+                            if (texts.length > 0) {
+                                successText = texts.join('\n\n');
+                            }
+                        } else if (content && typeof content === 'object' && typeof content.text === 'string') {
+                            successText = content.text;
+                        }
+                        if (!successText) {
+                            successText = '执行成功，未返回可展示的文本内容。';
+                        }
+                        successElement.textContent = successText;
+                    }
+                }
             } else {
-                document.getElementById('detail-response').textContent = '暂无响应数据';
-            }
-            
-            // 错误信息
-            if (exec.error) {
-                document.getElementById('detail-error-section').style.display = 'block';
-                document.getElementById('detail-error').textContent = exec.error;
-            } else {
-                document.getElementById('detail-error-section').style.display = 'none';
+                responseElement.textContent = '暂无响应数据';
             }
             
             // 显示模态框
