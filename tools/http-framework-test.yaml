@@ -465,6 +465,7 @@ args:
         parser.add_argument("--show-summary", dest="show_summary", action="store_true")
         parser.add_argument("--debug", dest="debug", action="store_true")
         parser.add_argument("--response-encoding", dest="response_encoding", default="")
+        parser.add_argument("--download", dest="download", default="")
         parser.set_defaults(
             include_headers=False,
             auto_encode_url=False,
@@ -603,6 +604,21 @@ args:
                         decoded_body, used_encoding, encoding_source = decode_body_bytes(bytes(body_buffer), response.headers, args.response_encoding)
 
                         print(f"\n===== Response #{run_index + 1} =====")
+                        download_target = (args.download or "").strip()
+                        if download_target:
+                            # 支持多次请求时通过 {i} 占位符区分文件名
+                            if repeat > 1 and "{i}" in download_target:
+                                filename = download_target.format(i=run_index + 1)
+                            else:
+                                filename = download_target
+                            try:
+                                if os.path.dirname(filename):
+                                    os.makedirs(os.path.dirname(filename), exist_ok=True)
+                                with open(filename, "wb") as fh:
+                                    fh.write(body_buffer)
+                                print(f"[saved response body to file: {filename}]")
+                            except OSError as exc:
+                                print(f"[failed to save response body to {filename}: {exc}]", file=sys.stderr)
                         if args.include_headers:
                             status_line = f"{http_version} {status_code} {response.reason_phrase}"
                             print(status_line)
@@ -803,10 +819,18 @@ parameters:
     required: false
     default: "request"
     flag: "--action"
+  - name: "download"
+    type: "string"
+    description: |
+      将响应体保存到本地文件，写入原始字节数据：
+      - "output.bin"：单次请求直接保存到指定文件
+      - "outputs/run-{i}.bin"：repeat>1 时按序号区分文件（{i} 将被替换为 1,2,...）
+    required: false
+    flag: "--download"
   - name: "additional_args"
     type: "string"
     description: |
-      额外的 httpx 选项，支持 "key=value" 或单词形式：
+      额外的 httpx 选项，需按 httpx.Client 的关键字参数名与类型填写，支持 "key=value" 或单词形式（等价于 key=true）：
       - "http2=true"
       - "cert=/path/to/client.pem"
       - "verify=/path/to/ca.pem" 或 "verify=false"
