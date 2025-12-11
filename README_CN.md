@@ -8,7 +8,7 @@
 
 CyberStrikeAI 是一款 **AI 原生渗透测试协同体**，以 Go 编写，内置上百款安全工具，完整支持 MCP 协议，能够让智能体按照对话指令自主规划、执行并总结一次完整的安全测试流程。
 
-<div align="center">
+<div align="left">
   <a href="https://zc.tencent.com/competition/competitionHackathon?code=cha004" target="_blank">
     <img src="./img/tch.png" alt="TCH Top-Ranked Intelligent Pentest Project" width="300">
   </a>
