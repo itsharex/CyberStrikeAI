@@ -328,4 +328,59 @@ async function initializeApp() {
     showLoginOverlay();
 }
 
+// 用户菜单控制
+function toggleUserMenu() {
+    const dropdown = document.getElementById('user-menu-dropdown');
+    if (!dropdown) return;
+    
+    const isVisible = dropdown.style.display !== 'none';
+    dropdown.style.display = isVisible ? 'none' : 'block';
+}
+
+// 点击页面其他地方时关闭下拉菜单
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('user-menu-dropdown');
+    const avatarBtn = document.querySelector('.user-avatar-btn');
+    
+    if (dropdown && avatarBtn && 
+        !dropdown.contains(event.target) && 
+        !avatarBtn.contains(event.target)) {
+        dropdown.style.display = 'none';
+    }
+});
+
+// 退出登录
+async function logout() {
+    // 关闭下拉菜单
+    const dropdown = document.getElementById('user-menu-dropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    
+    try {
+        // 先尝试调用退出API（如果token有效）
+        if (authToken) {
+            const headers = new Headers();
+            headers.set('Authorization', `Bearer ${authToken}`);
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: headers,
+            }).catch(() => {
+                // 忽略错误，继续清除本地认证信息
+            });
+        }
+    } catch (error) {
+        console.error('退出登录API调用失败:', error);
+    } finally {
+        // 无论如何都清除本地认证信息
+        clearAuthStorage();
+        hideLoginOverlay();
+        showLoginOverlay('已退出登录');
+    }
+}
+
+// 导出函数供HTML使用
+window.toggleUserMenu = toggleUserMenu;
+window.logout = logout;
+
 document.addEventListener('DOMContentLoaded', initializeApp);
