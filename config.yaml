@@ -39,7 +39,7 @@ openai:
 agent:
   max_iterations: 120 # 最大迭代次数，AI 代理最多执行多少轮工具调用
   # 达到最大迭代次数时，AI 会自动总结测试结果
-  large_result_threshold: 204800 # 大结果阈值（字节），默认50KB，超过此大小会自动保存到存储
+  large_result_threshold: 102400 # 大结果阈值（字节），默认50KB，超过此大小会自动保存到存储
   result_storage_dir: tmp # 结果存储目录，大结果会保存在此目录下
 # 数据库配置
 database:
