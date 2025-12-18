@@ -19,8 +19,10 @@ let toolsPagination = {
 
 // 打开设置
 async function openSettings() {
-    const modal = document.getElementById('settings-modal');
-    modal.style.display = 'block';
+    // 切换到设置页面
+    if (typeof switchPage === 'function') {
+        switchPage('settings');
+    }
     
     // 每次打开时清空全局状态映射，重新加载最新配置
     toolStateMap.clear();
@@ -34,26 +36,21 @@ async function openSettings() {
     });
 }
 
-// 关闭设置
+// 关闭设置（保留函数以兼容旧代码，但现在不需要关闭功能）
 function closeSettings() {
-    const modal = document.getElementById('settings-modal');
-    modal.style.display = 'none';
+    // 不再需要关闭功能，因为现在是页面而不是模态框
+    // 如果需要，可以切换回对话页面
+    if (typeof switchPage === 'function') {
+        switchPage('chat');
+    }
 }
 
-// 点击模态框外部关闭
+// 点击模态框外部关闭（只保留MCP详情模态框）
 window.onclick = function(event) {
-    const settingsModal = document.getElementById('settings-modal');
     const mcpModal = document.getElementById('mcp-detail-modal');
-    const monitorModal = document.getElementById('monitor-modal');
     
-    if (event.target === settingsModal) {
-        closeSettings();
-    }
     if (event.target === mcpModal) {
         closeMCPDetail();
-    }
-    if (event.target === monitorModal) {
-        closeMonitorPanel();
     }
 }
 
@@ -620,6 +617,122 @@ async function applySettings() {
     } catch (error) {
         console.error('应用配置失败:', error);
         alert('应用配置失败: ' + error.message);
+    }
+}
+
+// 保存工具配置（独立函数，用于MCP管理页面）
+async function saveToolsConfig() {
+    try {
+        // 先保存当前页的状态到全局映射
+        saveCurrentPageToolStates();
+        
+        // 获取当前配置（只获取工具部分）
+        const response = await apiFetch('/api/config');
+        if (!response.ok) {
+            throw new Error('获取配置失败');
+        }
+        
+        const currentConfig = await response.json();
+        
+        // 构建只包含工具配置的配置对象
+        const config = {
+            openai: currentConfig.openai || {},
+            agent: currentConfig.agent || {},
+            tools: []
+        };
+        
+        // 收集工具启用状态（与applySettings中的逻辑相同）
+        try {
+            const allToolsMap = new Map();
+            let page = 1;
+            let hasMore = true;
+            const pageSize = 100;
+            
+            // 遍历所有页面获取所有工具
+            while (hasMore) {
+                const url = `/api/config/tools?page=${page}&page_size=${pageSize}`;
+                
+                const pageResponse = await apiFetch(url);
+                if (!pageResponse.ok) {
+                    throw new Error('获取工具列表失败');
+                }
+                
+                const pageResult = await pageResponse.json();
+                
+                // 将工具添加到映射中
+                pageResult.tools.forEach(tool => {
+                    const savedState = toolStateMap.get(tool.name);
+                    allToolsMap.set(tool.name, {
+                        name: tool.name,
+                        enabled: savedState ? savedState.enabled : tool.enabled,
+                        is_external: savedState ? savedState.is_external : (tool.is_external || false),
+                        external_mcp: savedState ? savedState.external_mcp : (tool.external_mcp || '')
+                    });
+                });
+                
+                // 检查是否还有更多页面
+                if (page >= pageResult.total_pages) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+            
+            // 将所有工具添加到配置中
+            allToolsMap.forEach(tool => {
+                config.tools.push({
+                    name: tool.name,
+                    enabled: tool.enabled,
+                    is_external: tool.is_external,
+                    external_mcp: tool.external_mcp
+                });
+            });
+        } catch (error) {
+            console.warn('获取所有工具列表失败，仅使用全局状态映射', error);
+            // 如果获取失败，使用全局状态映射
+            toolStateMap.forEach((toolData, toolName) => {
+                config.tools.push({
+                    name: toolName,
+                    enabled: toolData.enabled,
+                    is_external: toolData.is_external,
+                    external_mcp: toolData.external_mcp
+                });
+            });
+        }
+        
+        // 更新配置
+        const updateResponse = await apiFetch('/api/config', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+        
+        if (!updateResponse.ok) {
+            const error = await updateResponse.json();
+            throw new Error(error.error || '更新配置失败');
+        }
+        
+        // 应用配置
+        const applyResponse = await apiFetch('/api/config/apply', {
+            method: 'POST'
+        });
+        
+        if (!applyResponse.ok) {
+            const error = await applyResponse.json();
+            throw new Error(error.error || '应用配置失败');
+        }
+        
+        alert('工具配置已成功保存！');
+        
+        // 重新加载工具列表以反映最新状态
+        if (typeof loadToolsList === 'function') {
+            await loadToolsList(toolsPagination.page, toolsSearchKeyword);
+        }
+    } catch (error) {
+        console.error('保存工具配置失败:', error);
+        alert('保存工具配置失败: ' + error.message);
     }
 }
 

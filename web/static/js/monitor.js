@@ -911,42 +911,17 @@ const monitorState = {
 };
 
 function openMonitorPanel() {
-    const modal = document.getElementById('monitor-modal');
-    if (!modal) {
-        return;
+    // 切换到MCP监控页面
+    if (typeof switchPage === 'function') {
+        switchPage('mcp-monitor');
     }
-    modal.style.display = 'block';
-
-    // 重置显示状态
-    const statsContainer = document.getElementById('monitor-stats');
-    const execContainer = document.getElementById('monitor-executions');
-    if (statsContainer) {
-        statsContainer.innerHTML = '<div class="monitor-empty">加载中...</div>';
-    }
-    if (execContainer) {
-        execContainer.innerHTML = '<div class="monitor-empty">加载中...</div>';
-    }
-
-    const statusFilter = document.getElementById('monitor-status-filter');
-    if (statusFilter) {
-        statusFilter.value = 'all';
-    }
-
-    // 重置分页状态
-    monitorState.pagination = {
-        page: 1,
-        pageSize: 20,
-        total: 0,
-        totalPages: 0
-    };
-
-    refreshMonitorPanel(1);
 }
 
 function closeMonitorPanel() {
-    const modal = document.getElementById('monitor-modal');
-    if (modal) {
-        modal.style.display = 'none';
+    // 不再需要关闭功能，因为现在是页面而不是模态框
+    // 如果需要，可以切换回对话页面
+    if (typeof switchPage === 'function') {
+        switchPage('chat');
     }
 }
 

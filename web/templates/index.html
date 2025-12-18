@@ -36,23 +36,11 @@
                 <div class="header-right">
                     <p class="header-subtitle">AI 驱动的自动化安全测试平台</p>
                     <div class="header-actions">
-                        <button class="monitor-btn" onclick="openMonitorPanel()" title="MCP 监控面板">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M3 12h4l3 8 4-16 3 8h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            <span>MCP监控</span>
-                        </button>
                         <button id="attack-chain-btn" class="attack-chain-btn" title="请选择一个对话以查看攻击链" disabled>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M10.5 13.5l3-3M8 8H5a4 4 0 1 0 0 8h3m8-8h3a4 4 0 0 1 0 8h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                             <span>攻击链</span>
-                        </button>
-                        <button class="settings-btn" onclick="openSettings()" title="设置">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
                         </button>
                     </div>
                 </div>
@@ -60,174 +48,237 @@
         </header>
 
         <div class="main-layout">
-            <!-- 历史对话侧边栏 -->
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <button class="new-chat-btn" onclick="startNewConversation()">
-                        <span>+</span> 新对话
-                    </button>
+            <!-- 主侧边栏 -->
+            <aside class="main-sidebar" id="main-sidebar">
+                <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="折叠/展开侧边栏">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
                 </div>
-                <div class="sidebar-content">
-                    <div class="sidebar-title">历史对话</div>
-                    <div id="conversations-list" class="conversations-list"></div>
-                </div>
+                <nav class="main-sidebar-nav">
+                    <div class="nav-item" data-page="chat">
+                        <div class="nav-item-content" data-title="对话" onclick="switchPage('chat')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>对话</span>
+                        </div>
+                    </div>
+                    <div class="nav-item nav-item-has-submenu" data-page="mcp">
+                        <div class="nav-item-content" data-title="MCP" onclick="toggleSubmenu('mcp')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 12h4l3 8 4-16 3 8h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>MCP</span>
+                            <svg class="submenu-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div class="nav-submenu">
+                            <div class="nav-submenu-item" data-page="mcp-monitor" onclick="switchPage('mcp-monitor')">
+                                <span>MCP状态监控</span>
+                            </div>
+                            <div class="nav-submenu-item" data-page="mcp-management" onclick="switchPage('mcp-management')">
+                                <span>MCP管理</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nav-item" data-page="settings">
+                        <div class="nav-item-content" data-title="系统设置" onclick="switchPage('settings')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>系统设置</span>
+                        </div>
+                    </div>
+                </nav>
             </aside>
 
-            <!-- 对话界面 -->
-            <div class="chat-container">
-                <div id="active-tasks-bar" class="active-tasks-bar"></div>
-                <div id="chat-messages" class="chat-messages"></div>
-                <div class="chat-input-container">
-                    <div class="chat-input-field">
-                        <textarea id="chat-input" placeholder="输入测试目标或命令... (Shift+Enter 换行，Enter 发送)" rows="1"></textarea>
-                        <div id="mention-suggestions" class="mention-suggestions" role="listbox" aria-label="工具提及候选"></div>
-                    </div>
-                    <button onclick="sendMessage()">发送</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 设置模态框 -->
-    <div id="settings-modal" class="modal">
-        <div class="modal-content settings-modal-content">
-            <div class="modal-header">
-                <h2>系统设置</h2>
-                <span class="modal-close" onclick="closeSettings()">&times;</span>
-            </div>
-            <div class="modal-body settings-body">
-                <!-- OpenAI配置 -->
-                <div class="settings-section">
-                    <h3>OpenAI 配置</h3>
-                    <div class="settings-form">
-                        <div class="form-group">
-                            <label for="openai-base-url">Base URL <span style="color: red;">*</span></label>
-                            <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1" required />
-                        </div>
-                        <div class="form-group">
-                            <label for="openai-api-key">API Key <span style="color: red;">*</span></label>
-                            <input type="password" id="openai-api-key" placeholder="输入OpenAI API Key" required />
-                        </div>
-                        <div class="form-group">
-                            <label for="openai-model">模型 <span style="color: red;">*</span></label>
-                            <input type="text" id="openai-model" placeholder="gpt-4" required />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- MCP工具配置 -->
-                <div class="settings-section">
-                    <h3>MCP 工具配置</h3>
-                    <div class="tools-controls">
-                        <div class="tools-actions">
-                            <button class="btn-secondary" onclick="selectAllTools()">全选</button>
-                            <button class="btn-secondary" onclick="deselectAllTools()">全不选</button>
-                            <div class="search-box">
-                                <input type="text" id="tools-search" placeholder="搜索工具..." onkeypress="handleSearchKeyPress(event)" oninput="if(this.value.trim() === '') clearSearch()" />
-                                <button class="btn-search" onclick="searchTools()" title="搜索">🔍</button>
+            <!-- 内容区域 -->
+            <div class="content-area">
+                <!-- 对话页面 -->
+                <div id="page-chat" class="page active">
+                    <div class="chat-page-layout">
+                        <!-- 历史对话侧边栏 -->
+                        <aside class="conversation-sidebar">
+                            <div class="sidebar-header">
+                                <button class="new-chat-btn" onclick="startNewConversation()">
+                                    <span>+</span> 新对话
+                                </button>
                             </div>
-                            <div class="tools-stats" id="tools-stats"></div>
+                            <div class="sidebar-content">
+                                <div class="sidebar-title">历史对话</div>
+                                <div id="conversations-list" class="conversations-list"></div>
+                            </div>
+                        </aside>
+
+                        <!-- 对话界面 -->
+                        <div class="chat-container">
+                            <div id="active-tasks-bar" class="active-tasks-bar"></div>
+                            <div id="chat-messages" class="chat-messages"></div>
+                            <div class="chat-input-container">
+                                <div class="chat-input-field">
+                                    <textarea id="chat-input" placeholder="输入测试目标或命令... (Shift+Enter 换行，Enter 发送)" rows="1"></textarea>
+                                    <div id="mention-suggestions" class="mention-suggestions" role="listbox" aria-label="工具提及候选"></div>
+                                </div>
+                                <button onclick="sendMessage()">发送</button>
+                            </div>
                         </div>
-                        <div id="tools-list" class="tools-list"></div>
                     </div>
                 </div>
 
-                <!-- 外部MCP配置 -->
-                <div class="settings-section">
-                    <h3>外部 MCP 配置</h3>
-                    <div class="external-mcp-controls">
-                        <div class="external-mcp-actions">
-                            <button class="btn-primary" onclick="showAddExternalMCPModal()">添加外部MCP</button>
+                <!-- MCP状态监控页面 -->
+                <div id="page-mcp-monitor" class="page">
+                    <div class="page-header">
+                        <h2>MCP 状态监控</h2>
+                        <button class="btn-secondary" onclick="refreshMonitorPanel()">刷新</button>
+                    </div>
+                    <div class="page-content">
+                        <div class="monitor-sections">
+                            <section class="monitor-section monitor-overview">
+                                <div class="section-header">
+                                    <h3>执行统计</h3>
+                                </div>
+                                <div id="monitor-stats" class="monitor-stats-grid">
+                                    <div class="monitor-empty">加载中...</div>
+                                </div>
+                            </section>
+                            <section class="monitor-section monitor-executions">
+                                <div class="section-header">
+                                    <h3>最新执行记录</h3>
+                                    <div class="section-actions">
+                                        <label>
+                                            状态筛选
+                                            <select id="monitor-status-filter" onchange="applyMonitorFilters()">
+                                                <option value="all">全部</option>
+                                                <option value="completed">已完成</option>
+                                                <option value="running">执行中</option>
+                                                <option value="failed">失败</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="monitor-executions" class="monitor-table-container">
+                                    <div class="monitor-empty">加载中...</div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MCP管理页面 -->
+                <div id="page-mcp-management" class="page">
+                    <div class="page-header">
+                        <h2>MCP 管理</h2>
+                        <div class="page-header-actions">
                             <button class="btn-secondary" onclick="loadExternalMCPs()">刷新</button>
-                            <div class="external-mcp-stats" id="external-mcp-stats"></div>
-                        </div>
-                        <div id="external-mcp-list" class="external-mcp-list"></div>
-                    </div>
-                </div>
-
-                <!-- Agent配置 -->
-                <div class="settings-section">
-                    <h3>Agent 配置</h3>
-                    <div class="settings-form">
-                        <div class="form-group">
-                            <label for="agent-max-iterations">最大迭代次数</label>
-                            <input type="number" id="agent-max-iterations" min="1" max="100" placeholder="30" />
+                            <button class="btn-primary" onclick="showAddExternalMCPModal()">添加外部MCP</button>
                         </div>
                     </div>
-                </div>
-
-                <!-- 安全设置 -->
-                <div class="settings-section">
-                    <h3>安全设置</h3>
-                    <div class="settings-form">
-                        <div class="form-group">
-                            <label for="auth-current-password">当前密码</label>
-                            <input type="password" id="auth-current-password" placeholder="输入当前登录密码" autocomplete="current-password" />
-                        </div>
-                        <div class="form-group">
-                            <label for="auth-new-password">新密码</label>
-                            <input type="password" id="auth-new-password" placeholder="设置新密码（至少 8 位）" autocomplete="new-password" />
-                        </div>
-                        <div class="form-group">
-                            <label for="auth-confirm-password">确认新密码</label>
-                            <input type="password" id="auth-confirm-password" placeholder="再次输入新密码" autocomplete="new-password" />
-                        </div>
-                        <div class="form-actions">
-                            <button class="btn-secondary" type="button" onclick="resetPasswordForm()">清空</button>
-                            <button class="btn-primary change-password-submit" type="button" onclick="changePassword()">修改密码</button>
-                        </div>
-                        <p class="password-hint">修改密码后，需要使用新密码重新登录。</p>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeSettings()">取消</button>
-                <button class="btn-primary" onclick="applySettings()">应用配置</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 监控面板模态框 -->
-    <div id="monitor-modal" class="modal">
-        <div class="modal-content monitor-modal-content">
-            <div class="modal-header">
-                <h2>MCP 监控面板</h2>
-                <span class="modal-close" onclick="closeMonitorPanel()">&times;</span>
-            </div>
-            <div class="monitor-modal-body">
-                <div class="monitor-sections">
-                    <section class="monitor-section monitor-overview">
-                        <div class="section-header">
-                            <h3>执行统计</h3>
-                            <button class="btn-secondary" onclick="refreshMonitorPanel()">刷新</button>
-                        </div>
-                        <div id="monitor-stats" class="monitor-stats-grid">
-                            <div class="monitor-empty">加载中...</div>
-                        </div>
-                    </section>
-                    <section class="monitor-section monitor-executions">
-                        <div class="section-header">
-                            <h3>最新执行记录</h3>
-                            <div class="section-actions">
-                                <label>
-                                    状态筛选
-                                    <select id="monitor-status-filter" onchange="applyMonitorFilters()">
-                                        <option value="all">全部</option>
-                                        <option value="completed">已完成</option>
-                                        <option value="running">执行中</option>
-                                        <option value="failed">失败</option>
-                                    </select>
-                                </label>
+                    <div class="page-content">
+                        <!-- MCP工具配置 -->
+                        <div class="settings-section" style="margin-bottom: 32px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 style="margin: 0;">MCP 工具配置</h3>
+                                <button class="btn-primary" onclick="saveToolsConfig()">保存工具配置</button>
+                            </div>
+                            <div class="tools-controls">
+                                <div class="tools-actions">
+                                    <button class="btn-secondary" onclick="selectAllTools()">全选</button>
+                                    <button class="btn-secondary" onclick="deselectAllTools()">全不选</button>
+                                    <div class="search-box">
+                                        <input type="text" id="tools-search" placeholder="搜索工具..." onkeypress="handleSearchKeyPress(event)" oninput="if(this.value.trim() === '') clearSearch()" />
+                                        <button class="btn-search" onclick="searchTools()" title="搜索">🔍</button>
+                                    </div>
+                                    <div class="tools-stats" id="tools-stats"></div>
+                                </div>
+                                <div id="tools-list" class="tools-list"></div>
                             </div>
                         </div>
-                        <div id="monitor-executions" class="monitor-table-container">
-                            <div class="monitor-empty">加载中...</div>
+
+                        <!-- 外部MCP配置 -->
+                        <div class="settings-section">
+                            <h3>外部 MCP 配置</h3>
+                            <div class="external-mcp-controls">
+                                <div class="external-mcp-actions">
+                                    <div class="external-mcp-stats" id="external-mcp-stats"></div>
+                                </div>
+                                <div id="external-mcp-list" class="external-mcp-list"></div>
+                            </div>
                         </div>
-                    </section>
+                    </div>
+                </div>
+
+                <!-- 系统设置页面 -->
+                <div id="page-settings" class="page">
+                    <div class="page-header">
+                        <h2>系统设置</h2>
+                    </div>
+                    <div class="page-content settings-body">
+                        <!-- OpenAI配置 -->
+                        <div class="settings-section">
+                            <h3>OpenAI 配置</h3>
+                            <div class="settings-form">
+                                <div class="form-group">
+                                    <label for="openai-base-url">Base URL <span style="color: red;">*</span></label>
+                                    <input type="text" id="openai-base-url" placeholder="https://api.openai.com/v1" required />
+                                </div>
+                                <div class="form-group">
+                                    <label for="openai-api-key">API Key <span style="color: red;">*</span></label>
+                                    <input type="password" id="openai-api-key" placeholder="输入OpenAI API Key" required />
+                                </div>
+                                <div class="form-group">
+                                    <label for="openai-model">模型 <span style="color: red;">*</span></label>
+                                    <input type="text" id="openai-model" placeholder="gpt-4" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Agent配置 -->
+                        <div class="settings-section">
+                            <h3>Agent 配置</h3>
+                            <div class="settings-form">
+                                <div class="form-group">
+                                    <label for="agent-max-iterations">最大迭代次数</label>
+                                    <input type="number" id="agent-max-iterations" min="1" max="100" placeholder="30" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 安全设置 -->
+                        <div class="settings-section">
+                            <h3>安全设置</h3>
+                            <div class="settings-form">
+                                <div class="form-group">
+                                    <label for="auth-current-password">当前密码</label>
+                                    <input type="password" id="auth-current-password" placeholder="输入当前登录密码" autocomplete="current-password" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="auth-new-password">新密码</label>
+                                    <input type="password" id="auth-new-password" placeholder="设置新密码（至少 8 位）" autocomplete="new-password" />
+                                </div>
+                                <div class="form-group">
+                                    <label for="auth-confirm-password">确认新密码</label>
+                                    <input type="password" id="auth-confirm-password" placeholder="再次输入新密码" autocomplete="new-password" />
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn-secondary" type="button" onclick="resetPasswordForm()">清空</button>
+                                    <button class="btn-primary change-password-submit" type="button" onclick="changePassword()">修改密码</button>
+                                </div>
+                                <p class="password-hint">修改密码后，需要使用新密码重新登录。</p>
+                            </div>
+                        </div>
+
+                        <div class="settings-actions">
+                            <button class="btn-primary" onclick="applySettings()">应用配置</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
 
     <!-- MCP调用详情模态框 -->
     <div id="mcp-detail-modal" class="modal">
@@ -413,6 +464,7 @@
     <!-- dagre layout for hierarchical layout -->
     <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/router.js"></script>
     <script src="/static/js/monitor.js"></script>
     <script src="/static/js/chat.js"></script>
     <script src="/static/js/settings.js"></script>
