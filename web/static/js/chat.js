@@ -54,6 +54,11 @@ function restoreChatDraft() {
             return;
         }
         
+        // 如果输入框已有内容，不恢复草稿（避免覆盖用户输入）
+        if (chatInput.value && chatInput.value.trim().length > 0) {
+            return;
+        }
+        
         const draft = localStorage.getItem(DRAFT_STORAGE_KEY);
         if (draft && draft.trim().length > 0) {
             chatInput.value = draft;
@@ -68,6 +73,7 @@ function restoreChatDraft() {
 // 清除保存的草稿
 function clearChatDraft() {
     try {
+        // 同步清除，确保立即生效
         localStorage.removeItem(DRAFT_STORAGE_KEY);
     } catch (error) {
         console.warn('清除草稿失败:', error);
@@ -98,10 +104,18 @@ async function sendMessage() {
     
     // 显示用户消息
     addMessage('user', message);
-    input.value = '';
     
-    // 清除保存的草稿
+    // 立即清空输入框并清除草稿（在发送请求之前）
+    input.value = '';
+    adjustTextareaHeight(input);
+    // 立即清除草稿，防止页面刷新时恢复
     clearChatDraft();
+    // 使用同步方式确保草稿被清除
+    try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch (e) {
+        // 忽略错误
+    }
     
     // 创建进度消息容器（使用详细的进度展示）
     const progressId = addProgressMessage();
@@ -170,9 +184,18 @@ async function sendMessage() {
             }
         }
         
+        // 消息发送成功后，再次确保草稿被清除
+        clearChatDraft();
+        try {
+            localStorage.removeItem(DRAFT_STORAGE_KEY);
+        } catch (e) {
+            // 忽略错误
+        }
+        
     } catch (error) {
         removeMessage(progressId);
         addMessage('system', '错误: ' + error.message);
+        // 发送失败时，不恢复草稿，因为消息已经显示在对话框中了
     }
 }
 
@@ -572,8 +595,38 @@ function initializeChatUI() {
     const chatInputEl = document.getElementById('chat-input');
     if (chatInputEl) {
         chatInputEl.style.height = '44px';
-        // 恢复保存的草稿
-        restoreChatDraft();
+        // 恢复保存的草稿（仅在输入框为空时恢复，避免覆盖用户输入）
+        if (!chatInputEl.value || chatInputEl.value.trim() === '') {
+            // 检查对话中是否有最近的消息（30秒内），如果有，说明可能是刚刚发送的消息，不恢复草稿
+            const messagesDiv = document.getElementById('chat-messages');
+            let shouldRestoreDraft = true;
+            if (messagesDiv && messagesDiv.children.length > 0) {
+                // 检查最后一条消息的时间
+                const lastMessage = messagesDiv.lastElementChild;
+                if (lastMessage) {
+                    const timeDiv = lastMessage.querySelector('.message-time');
+                    if (timeDiv && timeDiv.textContent) {
+                        // 如果最后一条消息是用户消息，且时间很近，不恢复草稿
+                        const isUserMessage = lastMessage.classList.contains('user');
+                        if (isUserMessage) {
+                            // 检查消息时间，如果是最近30秒内的，不恢复草稿
+                            const now = new Date();
+                            const messageTimeText = timeDiv.textContent;
+                            // 简单检查：如果消息时间显示的是当前时间（格式：HH:MM），且是用户消息，不恢复草稿
+                            // 更精确的方法是检查消息的创建时间，但需要从消息元素中获取
+                            // 这里采用简单策略：如果最后一条是用户消息，且输入框为空，可能是刚发送的，不恢复草稿
+                            shouldRestoreDraft = false;
+                        }
+                    }
+                }
+            }
+            if (shouldRestoreDraft) {
+                restoreChatDraft();
+            } else {
+                // 即使不恢复草稿，也要清除localStorage中的草稿，避免下次误恢复
+                clearChatDraft();
+            }
+        }
     }
 
     const messagesDiv = document.getElementById('chat-messages');
@@ -1312,7 +1365,29 @@ async function loadConversation(conversationId) {
         const messagesDiv = document.getElementById('chat-messages');
         messagesDiv.innerHTML = '';
         
-        // 切换对话时保留输入框内容（不清除草稿）
+        // 检查对话中是否有最近的消息，如果有，清除草稿（避免恢复已发送的消息）
+        let hasRecentUserMessage = false;
+        if (conversation.messages && conversation.messages.length > 0) {
+            const lastMessage = conversation.messages[conversation.messages.length - 1];
+            if (lastMessage && lastMessage.role === 'user') {
+                // 检查消息时间，如果是最近30秒内的，清除草稿
+                const messageTime = new Date(lastMessage.createdAt);
+                const now = new Date();
+                const timeDiff = now.getTime() - messageTime.getTime();
+                if (timeDiff < 30000) { // 30秒内
+                    hasRecentUserMessage = true;
+                }
+            }
+        }
+        if (hasRecentUserMessage) {
+            // 如果有最近发送的用户消息，清除草稿
+            clearChatDraft();
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                chatInput.value = '';
+                adjustTextareaHeight(chatInput);
+            }
+        }
         
         // 加载消息
         if (conversation.messages && conversation.messages.length > 0) {

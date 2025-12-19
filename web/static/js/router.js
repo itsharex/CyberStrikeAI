@@ -186,9 +186,9 @@ function initPage(pageId) {
             }
             break;
         case 'settings':
-            // 初始化设置页面
+            // 初始化设置页面（不需要加载工具列表）
             if (typeof loadConfig === 'function') {
-                loadConfig();
+                loadConfig(false);
             }
             break;
     }

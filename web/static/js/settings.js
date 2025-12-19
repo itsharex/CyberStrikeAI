@@ -27,8 +27,8 @@ async function openSettings() {
     // 每次打开时清空全局状态映射，重新加载最新配置
     toolStateMap.clear();
     
-    // 每次打开时重新加载最新配置
-    await loadConfig();
+    // 每次打开时重新加载最新配置（系统设置页面不需要加载工具列表）
+    await loadConfig(false);
     
     // 清除之前的验证错误状态
     document.querySelectorAll('.form-group input').forEach(input => {
@@ -55,7 +55,7 @@ window.onclick = function(event) {
 }
 
 // 加载配置
-async function loadConfig() {
+async function loadConfig(loadTools = true) {
     try {
         const response = await apiFetch('/api/config');
         if (!response.ok) {
@@ -72,13 +72,16 @@ async function loadConfig() {
         // 填充Agent配置
         document.getElementById('agent-max-iterations').value = currentConfig.agent.max_iterations || 30;
         
-        // 设置每页显示数量（会在分页控件渲染时设置）
-        const savedPageSize = getToolsPageSize();
-        toolsPagination.pageSize = savedPageSize;
-        
-        // 加载工具列表（使用分页）
-        toolsSearchKeyword = '';
-        await loadToolsList(1, '');
+        // 只有在需要时才加载工具列表（MCP管理页面需要，系统设置页面不需要）
+        if (loadTools) {
+            // 设置每页显示数量（会在分页控件渲染时设置）
+            const savedPageSize = getToolsPageSize();
+            toolsPagination.pageSize = savedPageSize;
+            
+            // 加载工具列表（使用分页）
+            toolsSearchKeyword = '';
+            await loadToolsList(1, '');
+        }
     } catch (error) {
         console.error('加载配置失败:', error);
         alert('加载配置失败: ' + error.message);
