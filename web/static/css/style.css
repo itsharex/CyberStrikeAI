@@ -175,9 +175,10 @@ body {
 }
 
 .main-sidebar.collapsed .nav-item-content {
-    padding: 12px;
+    padding: 12px 12px 12px 9px;
     justify-content: center;
     position: relative;
+    gap: 0;
 }
 
 .main-sidebar.collapsed .nav-item-content:hover::after {
@@ -244,9 +245,7 @@ body {
 }
 
 .main-sidebar.collapsed .nav-item-content span {
-    opacity: 0;
-    width: 0;
-    overflow: hidden;
+    display: none;
 }
 
 .nav-item-has-submenu .nav-item-content {
