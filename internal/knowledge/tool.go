@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"cyberstrike-ai/internal/mcp"
@@ -98,19 +99,62 @@ func RegisterKnowledgeTool(
 
 		// 格式化结果
 		var resultText strings.Builder
-		resultText.WriteString(fmt.Sprintf("找到 %d 条相关知识：\n\n", len(results)))
+
+		// 按文档分组结果，以便更好地展示上下文
+		resultsByItem := make(map[string][]*RetrievalResult)
+		for _, result := range results {
+			itemID := result.Item.ID
+			resultsByItem[itemID] = append(resultsByItem[itemID], result)
+		}
 
 		// 收集检索到的知识项ID（用于日志）
-		retrievedItemIDs := make([]string, 0, len(results))
+		retrievedItemIDs := make([]string, 0, len(resultsByItem))
 
-		for i, result := range results {
-			resultText.WriteString(fmt.Sprintf("--- 结果 %d (相似度: %.2f%%) ---\n", i+1, result.Similarity*100))
-			resultText.WriteString(fmt.Sprintf("来源: [%s] %s (ID: %s)\n", result.Item.Category, result.Item.Title, result.Item.ID))
-			resultText.WriteString(fmt.Sprintf("内容片段:\n%s\n\n", result.Chunk.ChunkText))
+		resultText.WriteString(fmt.Sprintf("找到 %d 条相关知识（包含上下文扩展）：\n\n", len(results)))
 
-			if !contains(retrievedItemIDs, result.Item.ID) {
-				retrievedItemIDs = append(retrievedItemIDs, result.Item.ID)
+		resultIndex := 1
+		for itemID, itemResults := range resultsByItem {
+			// 找到相似度最高的作为主结果
+			mainResult := itemResults[0]
+			maxSimilarity := mainResult.Similarity
+			for _, result := range itemResults {
+				if result.Similarity > maxSimilarity {
+					maxSimilarity = result.Similarity
+					mainResult = result
+				}
 			}
+
+			// 按chunk_index排序，保证阅读的逻辑顺序（文档的原始顺序）
+			sort.Slice(itemResults, func(i, j int) bool {
+				return itemResults[i].Chunk.ChunkIndex < itemResults[j].Chunk.ChunkIndex
+			})
+
+			// 显示主结果（相似度最高的）
+			resultText.WriteString(fmt.Sprintf("--- 结果 %d (相似度: %.2f%%) ---\n", resultIndex, mainResult.Similarity*100))
+			resultText.WriteString(fmt.Sprintf("来源: [%s] %s (ID: %s)\n", mainResult.Item.Category, mainResult.Item.Title, mainResult.Item.ID))
+
+			// 按逻辑顺序显示所有chunk（包括主结果和扩展的chunk）
+			if len(itemResults) == 1 {
+				// 只有一个chunk，直接显示
+				resultText.WriteString(fmt.Sprintf("内容片段:\n%s\n", mainResult.Chunk.ChunkText))
+			} else {
+				// 多个chunk，按逻辑顺序显示
+				resultText.WriteString("内容片段（按文档顺序）:\n")
+				for i, result := range itemResults {
+					// 标记主结果
+					marker := ""
+					if result.Chunk.ID == mainResult.Chunk.ID {
+						marker = " [主匹配]"
+					}
+					resultText.WriteString(fmt.Sprintf("  [片段 %d%s]\n%s\n", i+1, marker, result.Chunk.ChunkText))
+				}
+			}
+			resultText.WriteString("\n")
+
+			if !contains(retrievedItemIDs, itemID) {
+				retrievedItemIDs = append(retrievedItemIDs, itemID)
+			}
+			resultIndex++
 		}
 
 		// 在结果末尾添加元数据（JSON格式，用于提取知识项ID）
@@ -140,89 +184,6 @@ func RegisterKnowledgeTool(
 
 	mcpServer.RegisterTool(tool, handler)
 	logger.Info("知识检索工具已注册", zap.String("toolName", tool.Name))
-
-	// 注册读取完整知识项的工具
-	RegisterReadKnowledgeItemTool(mcpServer, manager, logger)
-}
-
-// RegisterReadKnowledgeItemTool 注册读取完整知识项工具到MCP服务器
-func RegisterReadKnowledgeItemTool(
-	mcpServer *mcp.Server,
-	manager *Manager,
-	logger *zap.Logger,
-) {
-	tool := mcp.Tool{
-		Name:             "read_knowledge_item",
-		Description:      "根据知识项ID读取完整的知识文档内容。**重要：此工具应谨慎使用，只在检索到的片段信息明显不足时才调用。** 使用场景：1) 检索片段缺少关键上下文导致无法理解；2) 需要查看文档的完整结构或流程；3) 片段信息不完整，必须查看完整文档才能回答用户问题。**不要**仅为了获取更多信息而盲目读取完整文档，因为检索工具已经返回了最相关的片段。传入知识项ID（从search_knowledge_base的检索结果中获取）即可获取该知识项的完整内容（包括标题、分类、完整文档内容等）。",
-		ShortDescription: "读取完整知识项文档（仅在片段信息不足时使用）",
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"item_id": map[string]interface{}{
-					"type":        "string",
-					"description": "知识项ID（可以从 search_knowledge_base 的检索结果中获取）",
-				},
-			},
-			"required": []string{"item_id"},
-		},
-	}
-
-	handler := func(ctx context.Context, args map[string]interface{}) (*mcp.ToolResult, error) {
-		itemID, ok := args["item_id"].(string)
-		if !ok || itemID == "" {
-			return &mcp.ToolResult{
-				Content: []mcp.Content{
-					{
-						Type: "text",
-						Text: "错误: item_id 参数不能为空",
-					},
-				},
-				IsError: true,
-			}, nil
-		}
-
-		logger.Info("读取知识项", zap.String("itemId", itemID))
-
-		// 获取完整知识项
-		item, err := manager.GetItem(itemID)
-		if err != nil {
-			logger.Error("读取知识项失败", zap.String("itemId", itemID), zap.Error(err))
-			return &mcp.ToolResult{
-				Content: []mcp.Content{
-					{
-						Type: "text",
-						Text: fmt.Sprintf("读取知识项失败: %v", err),
-					},
-				},
-				IsError: true,
-			}, nil
-		}
-
-		// 格式化结果
-		var resultText strings.Builder
-		resultText.WriteString("=== 完整知识项内容 ===\n\n")
-		resultText.WriteString(fmt.Sprintf("ID: %s\n", item.ID))
-		resultText.WriteString(fmt.Sprintf("分类: %s\n", item.Category))
-		resultText.WriteString(fmt.Sprintf("标题: %s\n", item.Title))
-		if item.FilePath != "" {
-			resultText.WriteString(fmt.Sprintf("文件路径: %s\n", item.FilePath))
-		}
-		resultText.WriteString("\n--- 完整内容 ---\n\n")
-		resultText.WriteString(item.Content)
-		resultText.WriteString("\n\n")
-
-		return &mcp.ToolResult{
-			Content: []mcp.Content{
-				{
-					Type: "text",
-					Text: resultText.String(),
-				},
-			},
-		}, nil
-	}
-
-	mcpServer.RegisterTool(tool, handler)
-	logger.Info("读取知识项工具已注册", zap.String("toolName", tool.Name))
 }
 
 // contains 检查切片是否包含元素
