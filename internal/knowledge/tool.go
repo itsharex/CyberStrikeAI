@@ -105,8 +105,8 @@ func RegisterKnowledgeTool(
 
 		for i, result := range results {
 			resultText.WriteString(fmt.Sprintf("--- 结果 %d (相似度: %.2f%%) ---\n", i+1, result.Similarity*100))
-			resultText.WriteString(fmt.Sprintf("来源: [%s] %s\n", result.Item.Category, result.Item.Title))
-			resultText.WriteString(fmt.Sprintf("内容:\n%s\n\n", result.Chunk.ChunkText))
+			resultText.WriteString(fmt.Sprintf("来源: [%s] %s (ID: %s)\n", result.Item.Category, result.Item.Title, result.Item.ID))
+			resultText.WriteString(fmt.Sprintf("内容片段:\n%s\n\n", result.Chunk.ChunkText))
 
 			if !contains(retrievedItemIDs, result.Item.ID) {
 				retrievedItemIDs = append(retrievedItemIDs, result.Item.ID)
@@ -140,6 +140,89 @@ func RegisterKnowledgeTool(
 
 	mcpServer.RegisterTool(tool, handler)
 	logger.Info("知识检索工具已注册", zap.String("toolName", tool.Name))
+
+	// 注册读取完整知识项的工具
+	RegisterReadKnowledgeItemTool(mcpServer, manager, logger)
+}
+
+// RegisterReadKnowledgeItemTool 注册读取完整知识项工具到MCP服务器
+func RegisterReadKnowledgeItemTool(
+	mcpServer *mcp.Server,
+	manager *Manager,
+	logger *zap.Logger,
+) {
+	tool := mcp.Tool{
+		Name:             "read_knowledge_item",
+		Description:      "根据知识项ID读取完整的知识文档内容。**重要：此工具应谨慎使用，只在检索到的片段信息明显不足时才调用。** 使用场景：1) 检索片段缺少关键上下文导致无法理解；2) 需要查看文档的完整结构或流程；3) 片段信息不完整，必须查看完整文档才能回答用户问题。**不要**仅为了获取更多信息而盲目读取完整文档，因为检索工具已经返回了最相关的片段。传入知识项ID（从search_knowledge_base的检索结果中获取）即可获取该知识项的完整内容（包括标题、分类、完整文档内容等）。",
+		ShortDescription: "读取完整知识项文档（仅在片段信息不足时使用）",
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"item_id": map[string]interface{}{
+					"type":        "string",
+					"description": "知识项ID（可以从 search_knowledge_base 的检索结果中获取）",
+				},
+			},
+			"required": []string{"item_id"},
+		},
+	}
+
+	handler := func(ctx context.Context, args map[string]interface{}) (*mcp.ToolResult, error) {
+		itemID, ok := args["item_id"].(string)
+		if !ok || itemID == "" {
+			return &mcp.ToolResult{
+				Content: []mcp.Content{
+					{
+						Type: "text",
+						Text: "错误: item_id 参数不能为空",
+					},
+				},
+				IsError: true,
+			}, nil
+		}
+
+		logger.Info("读取知识项", zap.String("itemId", itemID))
+
+		// 获取完整知识项
+		item, err := manager.GetItem(itemID)
+		if err != nil {
+			logger.Error("读取知识项失败", zap.String("itemId", itemID), zap.Error(err))
+			return &mcp.ToolResult{
+				Content: []mcp.Content{
+					{
+						Type: "text",
+						Text: fmt.Sprintf("读取知识项失败: %v", err),
+					},
+				},
+				IsError: true,
+			}, nil
+		}
+
+		// 格式化结果
+		var resultText strings.Builder
+		resultText.WriteString("=== 完整知识项内容 ===\n\n")
+		resultText.WriteString(fmt.Sprintf("ID: %s\n", item.ID))
+		resultText.WriteString(fmt.Sprintf("分类: %s\n", item.Category))
+		resultText.WriteString(fmt.Sprintf("标题: %s\n", item.Title))
+		if item.FilePath != "" {
+			resultText.WriteString(fmt.Sprintf("文件路径: %s\n", item.FilePath))
+		}
+		resultText.WriteString("\n--- 完整内容 ---\n\n")
+		resultText.WriteString(item.Content)
+		resultText.WriteString("\n\n")
+
+		return &mcp.ToolResult{
+			Content: []mcp.Content{
+				{
+					Type: "text",
+					Text: resultText.String(),
+				},
+			},
+		}, nil
+	}
+
+	mcpServer.RegisterTool(tool, handler)
+	logger.Info("读取知识项工具已注册", zap.String("toolName", tool.Name))
 }
 
 // contains 检查切片是否包含元素

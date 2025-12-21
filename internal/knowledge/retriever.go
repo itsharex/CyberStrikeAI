@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"go.uber.org/zap"
@@ -130,10 +131,11 @@ func (r *Retriever) Search(ctx context.Context, req *SearchRequest) ([]*Retrieva
 
 	// 计算相似度
 	type candidate struct {
-		chunk      *KnowledgeChunk
-		item       *KnowledgeItem
-		similarity float64
-		bm25Score  float64
+		chunk                 *KnowledgeChunk
+		item                  *KnowledgeItem
+		similarity            float64
+		bm25Score             float64
+		hasStrongKeywordMatch bool
 	}
 
 	candidates := make([]candidate, 0)
@@ -169,22 +171,10 @@ func (r *Retriever) Search(ctx context.Context, req *SearchRequest) ([]*Retrieva
 		// 综合BM25分数（用于后续排序）
 		bm25Score := math.Max(math.Max(chunkBM25, categoryBM25), titleBM25)
 
-		// 过滤策略：
-		// 1. 如果向量相似度达到阈值，通过
-		// 2. 如果category/title有显著匹配，适当放宽相似度要求（因为它们更可靠）
-		// 这样既保持了原有的过滤严格性，又能处理结构化字段匹配的情况
-		if similarity < threshold {
-			// 只有当category或title有明显匹配时，才适当放宽阈值
-			if hasStrongKeywordMatch {
-				// 放宽到原阈值的75%，但至少要有0.35的相似度
-				// 这确保了即使关键词匹配，向量相似度也不能太低
-				relaxedThreshold := math.Max(threshold*0.75, 0.35)
-				if similarity < relaxedThreshold {
-					continue
-				}
-			} else {
-				continue
-			}
+		// 收集所有候选（先不严格过滤，以便后续智能处理跨语言情况）
+		// 只过滤掉相似度极低的结果（< 0.1），避免噪音
+		if similarity < 0.1 {
+			continue
 		}
 
 		chunk := &KnowledgeChunk{
@@ -202,34 +192,105 @@ func (r *Retriever) Search(ctx context.Context, req *SearchRequest) ([]*Retrieva
 		}
 
 		candidates = append(candidates, candidate{
-			chunk:      chunk,
-			item:       item,
-			similarity: similarity,
-			bm25Score:  bm25Score,
+			chunk:                 chunk,
+			item:                  item,
+			similarity:            similarity,
+			bm25Score:             bm25Score,
+			hasStrongKeywordMatch: hasStrongKeywordMatch,
 		})
 	}
+
+	// 先按相似度排序（使用更高效的排序）
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].similarity > candidates[j].similarity
+	})
+
+	// 智能过滤策略：优先保留关键词匹配的结果，对跨语言查询使用更宽松的阈值
+	filteredCandidates := make([]candidate, 0)
+
+	// 检查是否有任何关键词匹配（用于判断是否是跨语言查询）
+	hasAnyKeywordMatch := false
+	for _, cand := range candidates {
+		if cand.hasStrongKeywordMatch {
+			hasAnyKeywordMatch = true
+			break
+		}
+	}
+
+	// 根据是否有关键词匹配，采用不同的阈值策略
+	effectiveThreshold := threshold
+	if !hasAnyKeywordMatch {
+		// 没有关键词匹配，可能是跨语言查询，适度放宽阈值
+		// 但即使跨语言，也不能无脑降低阈值，需要保证最低相关性
+		// 跨语言阈值设为0.6，确保返回的结果至少有一定相关性
+		effectiveThreshold = math.Max(threshold*0.85, 0.6)
+		r.logger.Debug("检测到可能的跨语言查询，使用放宽的阈值",
+			zap.Float64("originalThreshold", threshold),
+			zap.Float64("effectiveThreshold", effectiveThreshold),
+		)
+	}
+
+	// 检查最高相似度，用于判断是否确实有相关内容
+	maxSimilarity := 0.0
+	if len(candidates) > 0 {
+		maxSimilarity = candidates[0].similarity
+	}
+
+	// 应用智能过滤
+	for _, cand := range candidates {
+		if cand.similarity >= effectiveThreshold {
+			// 达到阈值，直接通过
+			filteredCandidates = append(filteredCandidates, cand)
+		} else if cand.hasStrongKeywordMatch {
+			// 有关键词匹配但相似度略低于阈值，适当放宽
+			relaxedThreshold := math.Max(effectiveThreshold*0.85, 0.55)
+			if cand.similarity >= relaxedThreshold {
+				filteredCandidates = append(filteredCandidates, cand)
+			}
+		}
+		// 如果既没有关键词匹配，相似度又低于阈值，则过滤掉
+	}
+
+	// 智能兜底策略：只有在最高相似度达到合理水平时，才考虑返回结果
+	// 如果最高相似度都很低（<0.55），说明确实没有相关内容，应该返回空
+	if len(filteredCandidates) == 0 && len(candidates) > 0 {
+		// 即使没有通过阈值过滤，如果最高相似度还可以（>=0.55），可以考虑返回Top-K
+		// 但这是最后的兜底，只在确实有一定相关性时才使用
+		minAcceptableSimilarity := 0.55
+		if maxSimilarity >= minAcceptableSimilarity {
+			r.logger.Debug("过滤后无结果，但最高相似度可接受，返回Top-K结果",
+				zap.Int("totalCandidates", len(candidates)),
+				zap.Float64("maxSimilarity", maxSimilarity),
+				zap.Float64("effectiveThreshold", effectiveThreshold),
+			)
+			maxResults := topK
+			if len(candidates) < maxResults {
+				maxResults = len(candidates)
+			}
+			// 只返回相似度 >= 0.55 的结果
+			for _, cand := range candidates {
+				if cand.similarity >= minAcceptableSimilarity && len(filteredCandidates) < maxResults {
+					filteredCandidates = append(filteredCandidates, cand)
+				}
+			}
+		} else {
+			r.logger.Debug("过滤后无结果，且最高相似度过低，返回空结果",
+				zap.Int("totalCandidates", len(candidates)),
+				zap.Float64("maxSimilarity", maxSimilarity),
+				zap.Float64("minAcceptableSimilarity", minAcceptableSimilarity),
+			)
+		}
+	} else if len(filteredCandidates) > topK {
+		// 如果过滤后结果太多，只取Top-K
+		filteredCandidates = filteredCandidates[:topK]
+	}
+
+	candidates = filteredCandidates
 
 	// 混合排序（向量相似度 + BM25）
 	hybridWeight := r.config.HybridWeight
 	if hybridWeight == 0 {
 		hybridWeight = 0.7
-	}
-
-	// 按混合分数排序（简化：主要按相似度，BM25作为次要因素）
-	// 这里我们主要使用相似度，因为BM25分数可能不稳定
-	// 实际可以使用更复杂的混合策略
-
-	// 选择Top-K
-	if len(candidates) > topK {
-		// 简单排序（按相似度）
-		for i := 0; i < len(candidates)-1; i++ {
-			for j := i + 1; j < len(candidates); j++ {
-				if candidates[i].similarity < candidates[j].similarity {
-					candidates[i], candidates[j] = candidates[j], candidates[i]
-				}
-			}
-		}
-		candidates = candidates[:topK]
 	}
 
 	// 转换为结果

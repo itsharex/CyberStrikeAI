@@ -32,7 +32,7 @@ func NewIndexer(db *sql.DB, embedder *Embedder, logger *zap.Logger) *Indexer {
 	}
 }
 
-// ChunkText 将文本分块
+// ChunkText 将文本分块（支持重叠）
 func (idx *Indexer) ChunkText(text string) []string {
 	// 按Markdown标题分割
 	chunks := idx.splitByMarkdownHeaders(text)
@@ -49,26 +49,9 @@ func (idx *Indexer) ChunkText(text string) []string {
 				if idx.estimateTokens(subChunk) <= idx.chunkSize {
 					result = append(result, subChunk)
 				} else {
-					// 按句子分割
-					sentences := idx.splitBySentences(subChunk)
-					currentChunk := ""
-					for _, sentence := range sentences {
-						testChunk := currentChunk
-						if testChunk != "" {
-							testChunk += "\n"
-						}
-						testChunk += sentence
-
-						if idx.estimateTokens(testChunk) > idx.chunkSize && currentChunk != "" {
-							result = append(result, currentChunk)
-							currentChunk = sentence
-						} else {
-							currentChunk = testChunk
-						}
-					}
-					if currentChunk != "" {
-						result = append(result, currentChunk)
-					}
+					// 按句子分割（支持重叠）
+					chunksWithOverlap := idx.splitBySentencesWithOverlap(subChunk)
+					result = append(result, chunksWithOverlap...)
 				}
 			}
 		}
@@ -131,7 +114,7 @@ func (idx *Indexer) splitByParagraphs(text string) []string {
 	return result
 }
 
-// splitBySentences 按句子分割
+// splitBySentences 按句子分割（用于内部，不包含重叠逻辑）
 func (idx *Indexer) splitBySentences(text string) []string {
 	// 简单的句子分割（按句号、问号、感叹号）
 	sentenceRegex := regexp.MustCompile(`[.!?]+\s+`)
@@ -143,6 +126,121 @@ func (idx *Indexer) splitBySentences(text string) []string {
 		}
 	}
 	return result
+}
+
+// splitBySentencesWithOverlap 按句子分割并应用重叠策略
+func (idx *Indexer) splitBySentencesWithOverlap(text string) []string {
+	if idx.overlap <= 0 {
+		// 如果没有重叠，使用简单分割
+		return idx.splitBySentencesSimple(text)
+	}
+
+	sentences := idx.splitBySentences(text)
+	if len(sentences) == 0 {
+		return []string{}
+	}
+
+	result := make([]string, 0)
+	currentChunk := ""
+
+	for _, sentence := range sentences {
+		testChunk := currentChunk
+		if testChunk != "" {
+			testChunk += "\n"
+		}
+		testChunk += sentence
+
+		testTokens := idx.estimateTokens(testChunk)
+
+		if testTokens > idx.chunkSize && currentChunk != "" {
+			// 当前块已达到大小限制，保存它
+			result = append(result, currentChunk)
+
+			// 从当前块的末尾提取重叠部分
+			overlapText := idx.extractLastTokens(currentChunk, idx.overlap)
+			if overlapText != "" {
+				// 如果有重叠内容，作为下一个块的起始
+				currentChunk = overlapText + "\n" + sentence
+			} else {
+				// 如果无法提取足够的重叠内容，直接使用当前句子
+				currentChunk = sentence
+			}
+		} else {
+			currentChunk = testChunk
+		}
+	}
+
+	// 添加最后一个块
+	if strings.TrimSpace(currentChunk) != "" {
+		result = append(result, currentChunk)
+	}
+
+	// 过滤空块
+	filtered := make([]string, 0)
+	for _, chunk := range result {
+		if strings.TrimSpace(chunk) != "" {
+			filtered = append(filtered, chunk)
+		}
+	}
+
+	return filtered
+}
+
+// splitBySentencesSimple 按句子分割（简单版本，无重叠）
+func (idx *Indexer) splitBySentencesSimple(text string) []string {
+	sentences := idx.splitBySentences(text)
+	result := make([]string, 0)
+	currentChunk := ""
+
+	for _, sentence := range sentences {
+		testChunk := currentChunk
+		if testChunk != "" {
+			testChunk += "\n"
+		}
+		testChunk += sentence
+
+		if idx.estimateTokens(testChunk) > idx.chunkSize && currentChunk != "" {
+			result = append(result, currentChunk)
+			currentChunk = sentence
+		} else {
+			currentChunk = testChunk
+		}
+	}
+	if currentChunk != "" {
+		result = append(result, currentChunk)
+	}
+
+	return result
+}
+
+// extractLastTokens 从文本末尾提取指定token数量的内容
+func (idx *Indexer) extractLastTokens(text string, tokenCount int) string {
+	if tokenCount <= 0 || text == "" {
+		return ""
+	}
+
+	// 估算字符数（1 token ≈ 4字符）
+	charCount := tokenCount * 4
+	runes := []rune(text)
+
+	if len(runes) <= charCount {
+		return text
+	}
+
+	// 从末尾提取指定数量的字符
+	// 尝试在句子边界处截断，避免截断句子中间
+	startPos := len(runes) - charCount
+	extracted := string(runes[startPos:])
+
+	// 尝试找到第一个句子边界（句号、问号、感叹号后的空格）
+	sentenceBoundary := regexp.MustCompile(`[.!?]+\s+`)
+	matches := sentenceBoundary.FindStringIndex(extracted)
+	if len(matches) > 0 && matches[0] > 0 {
+		// 在句子边界处截断，保留完整句子
+		extracted = extracted[matches[0]:]
+	}
+
+	return strings.TrimSpace(extracted)
 }
 
 // estimateTokens 估算token数（简单估算：1 token ≈ 4字符）
