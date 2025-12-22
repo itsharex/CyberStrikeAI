@@ -107,7 +107,8 @@ async function sendMessage() {
     
     // 立即清空输入框并清除草稿（在发送请求之前）
     input.value = '';
-    adjustTextareaHeight(input);
+    // 强制重置输入框高度为初始高度（44px）
+    input.style.height = '44px';
     // 立即清除草稿，防止页面刷新时恢复
     clearChatDraft();
     // 使用同步方式确保草稿被清除
