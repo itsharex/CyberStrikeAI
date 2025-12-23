@@ -1369,6 +1369,14 @@ async function loadConversation(conversationId) {
         currentConversationId = conversationId;
         updateActiveConversation();
         
+        // 如果攻击链模态框打开且显示的不是当前对话，关闭它
+        const attackChainModal = document.getElementById('attack-chain-modal');
+        if (attackChainModal && attackChainModal.style.display === 'block') {
+            if (currentAttackChainConversationId !== conversationId) {
+                closeAttackChainModal();
+            }
+        }
+        
         // 清空消息区域
         const messagesDiv = document.getElementById('chat-messages');
         messagesDiv.innerHTML = '';
@@ -1495,7 +1503,22 @@ function updateActiveConversation() {
 
 let attackChainCytoscape = null;
 let currentAttackChainConversationId = null;
-let isAttackChainLoading = false; // 防止重复加载
+// 按对话ID管理加载状态，实现不同对话之间的解耦
+const attackChainLoadingMap = new Map(); // Map<conversationId, boolean>
+
+// 检查指定对话是否正在加载
+function isAttackChainLoading(conversationId) {
+    return attackChainLoadingMap.get(conversationId) === true;
+}
+
+// 设置指定对话的加载状态
+function setAttackChainLoading(conversationId, loading) {
+    if (loading) {
+        attackChainLoadingMap.set(conversationId, true);
+    } else {
+        attackChainLoadingMap.delete(conversationId);
+    }
+}
 
 // 添加攻击链按钮
 function addAttackChainButton(conversationId) {
@@ -1538,10 +1561,15 @@ function updateAttackChainAvailability() {
 
 // 显示攻击链模态框
 async function showAttackChain(conversationId) {
-    // 防止重复点击
-    if (isAttackChainLoading) {
-        console.log('攻击链正在加载中，请稍候...');
-        return;
+    // 如果当前显示的对话ID不同，或者没有在加载，允许打开
+    // 如果正在加载同一个对话，也允许打开（显示加载状态）
+    if (isAttackChainLoading(conversationId) && currentAttackChainConversationId === conversationId) {
+        // 如果模态框已经打开且显示的是同一个对话，不重复打开
+        const modal = document.getElementById('attack-chain-modal');
+        if (modal && modal.style.display === 'block') {
+            console.log('攻击链正在加载中，模态框已打开');
+            return;
+        }
     }
     
     currentAttackChainConversationId = conversationId;
@@ -1579,11 +1607,11 @@ async function showAttackChain(conversationId) {
 
 // 加载攻击链数据
 async function loadAttackChain(conversationId) {
-    if (isAttackChainLoading) {
+    if (isAttackChainLoading(conversationId)) {
         return; // 防止重复调用
     }
     
-    isAttackChainLoading = true;
+    setAttackChainLoading(conversationId, true);
     
     try {
         const response = await apiFetch(`/api/attack-chain/${conversationId}`);
@@ -1607,12 +1635,16 @@ async function loadAttackChain(conversationId) {
                     `;
                 }
                 // 5秒后自动刷新（允许刷新，但保持加载状态防止重复点击）
+                // 使用闭包保存 conversationId，防止串台
                 setTimeout(() => {
-                    refreshAttackChain();
+                    // 检查当前显示的对话ID是否匹配
+                    if (currentAttackChainConversationId === conversationId) {
+                        refreshAttackChain();
+                    }
                 }, 5000);
-                // 在 409 情况下，保持 isAttackChainLoading = true，防止重复点击
+                // 在 409 情况下，保持加载状态，防止重复点击
                 // 但允许 refreshAttackChain 调用 loadAttackChain 来检查状态
-                // 注意：不重置 isAttackChainLoading，保持加载状态
+                // 注意：不重置加载状态，保持加载状态
                 // 恢复按钮状态（虽然保持加载状态，但允许用户手动刷新）
                 const regenerateBtn = document.querySelector('button[onclick="regenerateAttackChain()"]');
                 if (regenerateBtn) {
@@ -1620,7 +1652,7 @@ async function loadAttackChain(conversationId) {
                     regenerateBtn.style.opacity = '1';
                     regenerateBtn.style.cursor = 'pointer';
                 }
-                return; // 提前返回，不执行 finally 块中的 isAttackChainLoading = false
+                return; // 提前返回，不执行 finally 块中的 setAttackChainLoading(conversationId, false)
             }
             
             const error = await response.json();
@@ -1629,6 +1661,16 @@ async function loadAttackChain(conversationId) {
         
         const chainData = await response.json();
         
+        // 检查当前显示的对话ID是否匹配，防止串台
+        if (currentAttackChainConversationId !== conversationId) {
+            console.log('攻击链数据已返回，但当前显示的对话已切换，忽略此次渲染', {
+                returned: conversationId,
+                current: currentAttackChainConversationId
+            });
+            setAttackChainLoading(conversationId, false);
+            return;
+        }
+        
         // 渲染攻击链
         renderAttackChain(chainData);
         
@@ -1636,7 +1678,7 @@ async function loadAttackChain(conversationId) {
         updateAttackChainStats(chainData);
         
         // 成功加载后，重置加载状态
-        isAttackChainLoading = false;
+        setAttackChainLoading(conversationId, false);
         
     } catch (error) {
         console.error('加载攻击链失败:', error);
@@ -1645,7 +1687,7 @@ async function loadAttackChain(conversationId) {
             container.innerHTML = `<div class="error-message">加载失败: ${error.message}</div>`;
         }
         // 错误时也重置加载状态
-        isAttackChainLoading = false;
+        setAttackChainLoading(conversationId, false);
     } finally {
         // 恢复重新生成按钮
         const regenerateBtn = document.querySelector('button[onclick="regenerateAttackChain()"]');
@@ -2786,15 +2828,15 @@ function closeAttackChainModal() {
 function refreshAttackChain() {
     if (currentAttackChainConversationId) {
         // 临时允许刷新，即使正在加载中（用于检查生成状态）
-        const wasLoading = isAttackChainLoading;
-        isAttackChainLoading = false; // 临时重置，允许刷新
+        const wasLoading = isAttackChainLoading(currentAttackChainConversationId);
+        setAttackChainLoading(currentAttackChainConversationId, false); // 临时重置，允许刷新
         loadAttackChain(currentAttackChainConversationId).finally(() => {
             // 如果之前正在加载（409 情况），恢复加载状态
             // 否则保持 false（正常完成）
             if (wasLoading) {
                 // 检查是否仍然需要保持加载状态（如果还是 409，会在 loadAttackChain 中处理）
                 // 这里我们假设如果成功加载，则重置状态
-                // 如果还是 409，loadAttackChain 会保持 isAttackChainLoading = true
+                // 如果还是 409，loadAttackChain 会保持加载状态
             }
         });
     }
@@ -2806,13 +2848,15 @@ async function regenerateAttackChain() {
         return;
     }
     
-    // 防止重复点击
-    if (isAttackChainLoading) {
+    // 防止重复点击（只检查当前对话的加载状态）
+    if (isAttackChainLoading(currentAttackChainConversationId)) {
         console.log('攻击链正在生成中，请稍候...');
         return;
     }
     
-    isAttackChainLoading = true;
+    // 保存请求时的对话ID，防止串台
+    const savedConversationId = currentAttackChainConversationId;
+    setAttackChainLoading(savedConversationId, true);
     
     const container = document.getElementById('attack-chain-container');
     if (container) {
@@ -2829,7 +2873,7 @@ async function regenerateAttackChain() {
     
     try {
         // 调用重新生成接口
-        const response = await apiFetch(`/api/attack-chain/${currentAttackChainConversationId}/regenerate`, {
+        const response = await apiFetch(`/api/attack-chain/${savedConversationId}/regenerate`, {
             method: 'POST'
         });
         
@@ -2851,8 +2895,11 @@ async function regenerateAttackChain() {
                     `;
                 }
                 // 5秒后自动刷新
+                // savedConversationId 已在函数开始处定义
                 setTimeout(() => {
-                    if (isAttackChainLoading) {
+                    // 检查当前显示的对话ID是否匹配，且仍在加载中
+                    if (currentAttackChainConversationId === savedConversationId && 
+                        isAttackChainLoading(savedConversationId)) {
                         refreshAttackChain();
                     }
                 }, 5000);
@@ -2864,6 +2911,16 @@ async function regenerateAttackChain() {
         }
         
         const chainData = await response.json();
+        
+        // 检查当前显示的对话ID是否匹配，防止串台
+        if (currentAttackChainConversationId !== savedConversationId) {
+            console.log('攻击链数据已返回，但当前显示的对话已切换，忽略此次渲染', {
+                returned: savedConversationId,
+                current: currentAttackChainConversationId
+            });
+            setAttackChainLoading(savedConversationId, false);
+            return;
+        }
         
         // 渲染攻击链
         renderAttackChain(chainData);
@@ -2877,7 +2934,7 @@ async function regenerateAttackChain() {
             container.innerHTML = `<div class="error-message">重新生成失败: ${error.message}</div>`;
         }
     } finally {
-        isAttackChainLoading = false;
+        setAttackChainLoading(savedConversationId, false);
         
         // 恢复重新生成按钮
         if (regenerateBtn) {
