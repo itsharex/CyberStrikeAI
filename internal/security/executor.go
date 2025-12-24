@@ -145,9 +145,33 @@ func (e *Executor) ExecuteTool(ctx context.Context, toolName string, args map[st
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// 检查退出码是否在允许列表中
+		exitCode := getExitCode(err)
+		if exitCode != nil && toolConfig.AllowedExitCodes != nil {
+			for _, allowedCode := range toolConfig.AllowedExitCodes {
+				if *exitCode == allowedCode {
+					e.logger.Info("工具执行完成（退出码在允许列表中）",
+						zap.String("tool", toolName),
+						zap.Int("exitCode", *exitCode),
+						zap.String("output", string(output)),
+					)
+					return &mcp.ToolResult{
+						Content: []mcp.Content{
+							{
+								Type: "text",
+								Text: string(output),
+							},
+						},
+						IsError: false,
+					}, nil
+				}
+			}
+		}
+
 		e.logger.Error("工具执行失败",
 			zap.String("tool", toolName),
 			zap.Error(err),
+			zap.Int("exitCode", getExitCodeValue(err)),
 			zap.String("output", string(output)),
 		)
 		return &mcp.ToolResult{
@@ -1216,4 +1240,26 @@ func (e *Executor) convertToOpenAIType(configType string) string {
 		)
 		return configType
 	}
+}
+
+// getExitCode 从错误中提取退出码，如果不是ExitError则返回nil
+func getExitCode(err error) *int {
+	if err == nil {
+		return nil
+	}
+	if exitError, ok := err.(*exec.ExitError); ok {
+		if exitError.ProcessState != nil {
+			exitCode := exitError.ExitCode()
+			return &exitCode
+		}
+	}
+	return nil
+}
+
+// getExitCodeValue 从错误中提取退出码值，如果不是ExitError则返回-1
+func getExitCodeValue(err error) int {
+	if code := getExitCode(err); code != nil {
+		return *code
+	}
+	return -1
 }

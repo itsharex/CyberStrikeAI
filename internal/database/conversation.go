@@ -129,11 +129,30 @@ func (db *DB) GetConversation(id string) (*Conversation, error) {
 }
 
 // ListConversations 列出所有对话
-func (db *DB) ListConversations(limit, offset int) ([]*Conversation, error) {
-	rows, err := db.Query(
-		"SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-		limit, offset,
-	)
+func (db *DB) ListConversations(limit, offset int, search string) ([]*Conversation, error) {
+	var rows *sql.Rows
+	var err error
+	
+	if search != "" {
+		// 使用LIKE进行模糊搜索，搜索标题和消息内容
+		searchPattern := "%" + search + "%"
+		// 使用DISTINCT避免重复，因为一个对话可能有多条消息匹配
+		rows, err = db.Query(
+			`SELECT DISTINCT c.id, c.title, c.created_at, c.updated_at 
+			 FROM conversations c
+			 LEFT JOIN messages m ON c.id = m.conversation_id
+			 WHERE c.title LIKE ? OR m.content LIKE ?
+			 ORDER BY c.updated_at DESC 
+			 LIMIT ? OFFSET ?`,
+			searchPattern, searchPattern, limit, offset,
+		)
+	} else {
+		rows, err = db.Query(
+			"SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+			limit, offset,
+		)
+	}
+	
 	if err != nil {
 		return nil, fmt.Errorf("查询对话列表失败: %w", err)
 	}

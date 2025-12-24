@@ -748,6 +748,61 @@ header {
     padding: 0 8px;
 }
 
+.conversation-search-box {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.conversation-search-box input {
+    width: 100%;
+    padding: 8px 32px 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.conversation-search-box input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+
+.conversation-search-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.conversation-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: color 0.2s ease;
+    border-radius: 4px;
+}
+
+.conversation-search-clear:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.conversation-search-clear svg {
+    width: 14px;
+    height: 14px;
+}
+
 .conversations-list {
     display: flex;
     flex-direction: column;

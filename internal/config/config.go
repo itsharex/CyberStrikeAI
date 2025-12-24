@@ -105,6 +105,7 @@ type ToolConfig struct {
 	Enabled          bool              `yaml:"enabled"`
 	Parameters       []ParameterConfig `yaml:"parameters,omitempty"`  // 参数定义（可选）
 	ArgMapping       string            `yaml:"arg_mapping,omitempty"` // 参数映射方式: "auto", "manual", "template"（可选）
+	AllowedExitCodes []int             `yaml:"allowed_exit_codes,omitempty"` // 允许的退出码列表（某些工具在成功时也返回非零退出码）
 }
 
 // ParameterConfig 参数配置

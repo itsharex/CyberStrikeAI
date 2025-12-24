@@ -142,6 +142,18 @@
                             </div>
                             <div class="sidebar-content">
                                 <div class="sidebar-title">历史对话</div>
+                                <div class="conversation-search-box">
+                                    <input type="text" id="conversation-search-input" placeholder="搜索历史记录..." 
+                                           oninput="handleConversationSearch(this.value)" 
+                                           onkeypress="if(event.key === 'Enter') handleConversationSearch(this.value)" />
+                                    <button class="conversation-search-clear" id="conversation-search-clear" 
+                                            onclick="clearConversationSearch()" style="display: none;" title="清除搜索">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                                            <path d="M15 9l-6 6M9 9l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div id="conversations-list" class="conversations-list"></div>
                             </div>
                         </aside>

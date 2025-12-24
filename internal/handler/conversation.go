@@ -55,6 +55,7 @@ func (h *ConversationHandler) CreateConversation(c *gin.Context) {
 func (h *ConversationHandler) ListConversations(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "50")
 	offsetStr := c.DefaultQuery("offset", "0")
+	search := c.Query("search") // 获取搜索参数
 
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
@@ -63,7 +64,7 @@ func (h *ConversationHandler) ListConversations(c *gin.Context) {
 		limit = 50
 	}
 
-	conversations, err := h.db.ListConversations(limit, offset)
+	conversations, err := h.db.ListConversations(limit, offset, search)
 	if err != nil {
 		h.logger.Error("获取对话列表失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

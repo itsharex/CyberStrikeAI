@@ -1185,9 +1185,13 @@ function startNewConversation() {
 }
 
 // 加载对话列表（按时间分组）
-async function loadConversations() {
+async function loadConversations(searchQuery = '') {
     try {
-        const response = await apiFetch('/api/conversations?limit=50');
+        let url = '/api/conversations?limit=50';
+        if (searchQuery && searchQuery.trim()) {
+            url += '&search=' + encodeURIComponent(searchQuery.trim());
+        }
+        const response = await apiFetch(url);
         const conversations = await response.json();
 
         const listContainer = document.getElementById('conversations-list');
@@ -1313,6 +1317,45 @@ function createConversationListItem(conversation) {
 
     item.onclick = () => loadConversation(conversation.id);
     return item;
+}
+
+// 处理历史记录搜索
+let conversationSearchTimer = null;
+function handleConversationSearch(query) {
+    // 防抖处理，避免频繁请求
+    if (conversationSearchTimer) {
+        clearTimeout(conversationSearchTimer);
+    }
+    
+    const searchInput = document.getElementById('conversation-search-input');
+    const clearBtn = document.getElementById('conversation-search-clear');
+    
+    if (clearBtn) {
+        if (query && query.trim()) {
+            clearBtn.style.display = 'block';
+        } else {
+            clearBtn.style.display = 'none';
+        }
+    }
+    
+    conversationSearchTimer = setTimeout(() => {
+        loadConversations(query);
+    }, 300); // 300ms防抖延迟
+}
+
+// 清除搜索
+function clearConversationSearch() {
+    const searchInput = document.getElementById('conversation-search-input');
+    const clearBtn = document.getElementById('conversation-search-clear');
+    
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    if (clearBtn) {
+        clearBtn.style.display = 'none';
+    }
+    
+    loadConversations('');
 }
 
 function formatConversationTimestamp(dateObj, todayStart, yesterdayStart) {
@@ -2070,8 +2113,10 @@ function renderAttackChain(chainData) {
                     'target-arrow-size': 8,
                     // 使用bezier曲线，更美观
                     'curve-style': 'bezier',
-                    'control-point-step-size': 50,
-                    'control-point-distance': 40,
+                    'control-point-step-size': 60,  // 增加步长，让控制点分布更均匀
+                    // 大幅增加控制点距离，避免多条边指向同一节点时箭头重叠
+                    // 使用更大的值确保箭头之间有足够的间距
+                    'control-point-distance': isComplexGraph ? 180 : 150,
                     'opacity': 0.7,
                     // 根据边类型设置线条样式：targets使用虚线，其他使用实线
                     'line-style': function(ele) {
@@ -2153,43 +2198,47 @@ function renderAttackChain(chainData) {
             const estimatedDepth = Math.ceil(Math.log2(Math.max(nodeCount, 2))) + 1;
             
             // 动态计算节点水平间距：基于容器宽度和节点数量
-            // 目标：使用容器宽度的85-90%，让图充分展开
+            // 目标：使用容器宽度的95%，让图充分展开
             const maxLevelWidth = Math.max(1, Math.ceil(nodeCount / estimatedDepth));
-            const targetGraphWidth = containerWidth * 0.88;  // 使用88%的容器宽度
-            const minNodeSep = avgNodeWidth * 0.8;  // 最小间距为节点宽度的80%（从60%增加到80%，增加水平间距）
+            const targetGraphWidth = containerWidth * 0.95;  // 使用95%的容器宽度，让图更宽
+            // 大幅增加最小间距，确保节点不重叠（考虑节点宽度和标签）
+            const minNodeSep = avgNodeWidth * 1.5;  // 最小间距为节点宽度的1.5倍，确保节点之间有足够空间
+            // 优化间距计算：确保即使节点很多时也有足够的间距
+            const availableWidth = targetGraphWidth - avgNodeWidth * maxLevelWidth;
             const calculatedNodeSep = Math.max(
                 minNodeSep,
                 Math.min(
-                    (targetGraphWidth - avgNodeWidth * maxLevelWidth) / Math.max(1, maxLevelWidth - 1),
-                    avgNodeWidth * 2.0  // 最大间距不超过节点宽度的2.0倍（从1.5增加到2.0）
+                    availableWidth / Math.max(1, maxLevelWidth - 1),
+                    avgNodeWidth * 3.0  // 最大间距不超过节点宽度的3.0倍，让图更宽
                 )
             );
             
             // 动态计算层级间距：基于容器高度和层级数
-            // 增加最小间距，避免节点重合
+            // 大幅增加最小间距，避免节点重合
             const targetGraphHeight = containerHeight * 0.85;
             const calculatedRankSep = Math.max(
-                avgNodeHeight * 1.8,  // 最小为节点高度的1.8倍（从1.2增加到1.8，增加层级间距）
+                avgNodeHeight * 2.5,  // 最小为节点高度的2.5倍，确保垂直方向有足够间距
                 Math.min(
                     targetGraphHeight / Math.max(estimatedDepth - 1, 1),
-                    avgNodeHeight * 3.5  // 最大不超过节点高度的3.5倍（从2.5增加到3.5）
+                    avgNodeHeight * 4.0  // 最大不超过节点高度的4.0倍
                 )
             );
             
             // 边间距：基于节点间距的合理比例
-            const calculatedEdgeSep = Math.max(40, calculatedNodeSep * 0.3);  // 增加边间距（从30增加到40，从0.25增加到0.3）
+            // 增加边间距，确保边之间有足够的空间，避免视觉混乱
+            const calculatedEdgeSep = Math.max(50, calculatedNodeSep * 0.4);
             
             // 根据图的复杂度调整布局参数，优化可读性和空间利用率
             layoutOptions = {
                 name: 'dagre',
                 rankDir: 'TB',  // 从上到下
-                spacingFactor: 1.0,  // 使用1.0，因为我们已经动态计算了具体间距
+                spacingFactor: 1.2,  // 增加间距因子，让图更宽
                 nodeSep: Math.round(calculatedNodeSep),  // 动态计算的节点间距
                 edgeSep: Math.round(calculatedEdgeSep),  // 动态计算的边间距
                 rankSep: Math.round(calculatedRankSep),  // 动态计算的层级间距
                 nodeDimensionsIncludeLabels: true,  // 考虑标签大小
                 animate: false,
-                padding: Math.min(40, containerWidth * 0.02),  // 动态边距，不超过容器宽度的2%
+                padding: Math.max(40, Math.min(60, containerWidth * 0.03)),  // 减少边距，让图更宽
                 // 优化边的路由，减少交叉
                 edgeRouting: 'polyline',
                 // 对齐方式：使用上左对齐，然后手动居中
@@ -2205,11 +2254,14 @@ function renderAttackChain(chainData) {
     // 应用布局，等待布局完成后再平衡和居中
     const layout = attackChainCytoscape.layout(layoutOptions);
     layout.one('layoutstop', () => {
-        // 布局完成后，先平衡分支，再居中显示
+        // 布局完成后，先平衡分支，再修复重叠，最后居中显示
         setTimeout(() => {
             balanceBranches();
             setTimeout(() => {
-                centerAttackChain();
+                fixNodeOverlaps();
+                setTimeout(() => {
+                    centerAttackChain();
+                }, 50);
             }, 50);
         }, 100);
     });
@@ -2228,13 +2280,15 @@ function renderAttackChain(chainData) {
             const avgNodeWidth = isComplexGraph ? 230 : 250;
             const estimatedDepth = Math.ceil(Math.log2(Math.max(nodeCount, 2))) + 1;
             const maxLevelWidth = Math.max(1, Math.ceil(nodeCount / estimatedDepth));
-            const targetGraphWidth = containerWidth * 0.88;
-            const minNodeSep = avgNodeWidth * 0.8;  // 与布局计算保持一致
+            const targetGraphWidth = containerWidth * 0.95;  // 与布局计算保持一致，使用95%宽度
+            // 与布局计算保持一致，使用更大的间距避免节点重叠
+            const minNodeSep = avgNodeWidth * 1.5;  // 与布局计算保持一致
+            const availableWidth = targetGraphWidth - avgNodeWidth * maxLevelWidth;
             const spacing = Math.max(
                 minNodeSep,
                 Math.min(
-                    (targetGraphWidth - avgNodeWidth * maxLevelWidth) / Math.max(1, maxLevelWidth - 1),
-                    avgNodeWidth * 2.0  // 与布局计算保持一致
+                    availableWidth / Math.max(1, maxLevelWidth - 1),
+                    avgNodeWidth * 3.0  // 与布局计算保持一致
                 )
             );
             
@@ -2334,9 +2388,9 @@ function renderAttackChain(chainData) {
             const leftTotalWidth = leftGroup.length > 0 ? leftTotal + (leftGroup.length - 1) * spacing : 0;
             const rightTotalWidth = rightGroup.length > 0 ? rightTotal + (rightGroup.length - 1) * spacing : 0;
             // 根据容器宽度动态调整，充分利用水平空间
-            // 使用更大的宽度系数，让图充分利用容器空间（使用88%的容器宽度以匹配布局算法）
+            // 使用更大的宽度系数，让图充分利用容器空间（使用95%的容器宽度以匹配布局算法）
             const maxSideWidth = Math.max(leftTotalWidth, rightTotalWidth);
-            const targetWidth = Math.max(maxSideWidth * 1.2, containerWidth * 0.88);  // 使用88%的容器宽度以匹配布局
+            const targetWidth = Math.max(maxSideWidth * 1.2, containerWidth * 0.95);  // 使用95%的容器宽度以匹配布局
             const maxWidth = Math.max(targetWidth, avgNodeWidth * 2);
             
             // 递归调整子树位置
@@ -2437,6 +2491,148 @@ function renderAttackChain(chainData) {
         }
     }
     
+    // 修复节点重叠的函数
+    function fixNodeOverlaps() {
+        try {
+            if (!attackChainCytoscape) {
+                return;
+            }
+            
+            const nodes = attackChainCytoscape.nodes();
+            const minSpacing = 40; // 节点之间的最小间距（像素），增加以确保不重叠
+            const overlapThreshold = 0.05; // 重叠阈值（5%），更敏感地检测重叠
+            
+            // 按Y坐标分组节点（同一层级的节点）
+            const nodesByLevel = new Map();
+            nodes.forEach(node => {
+                const pos = node.position();
+                const y = Math.round(pos.y / 30) * 30; // 将相近的Y坐标归为同一层级（更精细的分组）
+                
+                if (!nodesByLevel.has(y)) {
+                    nodesByLevel.set(y, []);
+                }
+                nodesByLevel.get(y).push(node);
+            });
+            
+            // 检查并修复同一层级内的重叠
+            nodesByLevel.forEach((levelNodes, levelY) => {
+                // 按X坐标排序
+                levelNodes.sort((a, b) => a.position().x - b.position().x);
+                
+                // 检查相邻节点是否重叠
+                for (let i = 0; i < levelNodes.length - 1; i++) {
+                    const node1 = levelNodes[i];
+                    const node2 = levelNodes[i + 1];
+                    
+                    const pos1 = node1.position();
+                    const pos2 = node2.position();
+                    const width1 = node1.width();
+                    const width2 = node2.width();
+                    const height1 = node1.height();
+                    const height2 = node2.height();
+                    
+                    // 计算节点边界
+                    const left1 = pos1.x - width1 / 2;
+                    const right1 = pos1.x + width1 / 2;
+                    const top1 = pos1.y - height1 / 2;
+                    const bottom1 = pos1.y + height1 / 2;
+                    
+                    const left2 = pos2.x - width2 / 2;
+                    const right2 = pos2.x + width2 / 2;
+                    const top2 = pos2.y - height2 / 2;
+                    const bottom2 = pos2.y + height2 / 2;
+                    
+                    // 检查是否重叠
+                    const horizontalOverlap = Math.max(0, Math.min(right1, right2) - Math.max(left1, left2));
+                    const verticalOverlap = Math.max(0, Math.min(bottom1, bottom2) - Math.max(top1, top2));
+                    
+                    const overlapArea = horizontalOverlap * verticalOverlap;
+                    const node1Area = width1 * height1;
+                    const node2Area = width2 * height2;
+                    const minArea = Math.min(node1Area, node2Area);
+                    
+                    // 如果重叠面积超过阈值，调整位置
+                    if (overlapArea > minArea * overlapThreshold) {
+                        // 计算需要的间距
+                        const requiredSpacing = (width1 + width2) / 2 + minSpacing;
+                        const currentSpacing = pos2.x - pos1.x;
+                        const spacingDiff = requiredSpacing - currentSpacing;
+                        
+                        if (spacingDiff > 0) {
+                            // 向右移动第二个节点及其后续节点
+                            const moveDistance = spacingDiff;
+                            for (let j = i + 1; j < levelNodes.length; j++) {
+                                const node = levelNodes[j];
+                                const currentPos = node.position();
+                                node.position({
+                                    x: currentPos.x + moveDistance,
+                                    y: currentPos.y
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 检查不同层级之间的重叠（垂直方向）- 简化处理
+            // 只处理明显的垂直重叠，通过增加层级间距来解决
+            const sortedLevels = Array.from(nodesByLevel.keys()).sort((a, b) => a - b);
+            for (let i = 0; i < sortedLevels.length - 1; i++) {
+                const level1Y = sortedLevels[i];
+                const level2Y = sortedLevels[i + 1];
+                const level1Nodes = nodesByLevel.get(level1Y);
+                const level2Nodes = nodesByLevel.get(level2Y);
+                
+                // 检查两个层级之间的最小垂直间距
+                let minVerticalSpacing = Infinity;
+                level1Nodes.forEach(node1 => {
+                    const pos1 = node1.position();
+                    const height1 = node1.height();
+                    const bottom1 = pos1.y + height1 / 2;
+                    
+                    level2Nodes.forEach(node2 => {
+                        const pos2 = node2.position();
+                        const height2 = node2.height();
+                        const top2 = pos2.y - height2 / 2;
+                        
+                        const spacing = top2 - bottom1;
+                        if (spacing < minVerticalSpacing) {
+                            minVerticalSpacing = spacing;
+                        }
+                    });
+                });
+                
+                // 如果垂直间距太小，向下移动第二个层级的所有节点
+                if (minVerticalSpacing < minSpacing) {
+                    const moveDistance = minSpacing - minVerticalSpacing;
+                    level2Nodes.forEach(node => {
+                        const currentPos = node.position();
+                        node.position({
+                            x: currentPos.x,
+                            y: currentPos.y + moveDistance
+                        });
+                    });
+                    
+                    // 更新后续层级的Y坐标
+                    for (let j = i + 2; j < sortedLevels.length; j++) {
+                        const laterLevelY = sortedLevels[j];
+                        const laterLevelNodes = nodesByLevel.get(laterLevelY);
+                        laterLevelNodes.forEach(node => {
+                            const currentPos = node.position();
+                            node.position({
+                                x: currentPos.x,
+                                y: currentPos.y + moveDistance
+                            });
+                        });
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.warn('修复节点重叠时出错:', error);
+        }
+    }
+    
     // 居中攻击链的函数
     function centerAttackChain() {
         try {
@@ -2472,7 +2668,7 @@ function renderAttackChain(chainData) {
                 // 根据图的宽度和容器宽度，调整缩放以更好地利用水平空间
                 const graphWidth = extent.x2 - extent.x1;
                 const graphHeight = extent.y2 - extent.y1;
-                const availableWidth = containerWidth * 0.88; // 使用88%的容器宽度（与布局算法一致）
+                const availableWidth = containerWidth * 0.95; // 使用95%的容器宽度（与布局算法一致）
                 const availableHeight = containerHeight * 0.85; // 使用85%的容器高度
                 const currentZoom = attackChainCytoscape.zoom();
                 
