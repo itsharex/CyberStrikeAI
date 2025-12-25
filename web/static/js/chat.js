@@ -1356,7 +1356,9 @@ function createConversationListItem(conversation) {
 
     const title = document.createElement('div');
     title.className = 'conversation-title';
-    title.textContent = conversation.title || '未命名对话';
+    const titleText = conversation.title || '未命名对话';
+    title.textContent = safeTruncateText(titleText, 60);
+    title.title = titleText; // 设置完整标题以便悬停查看
     contentWrapper.appendChild(title);
 
     const time = document.createElement('div');
@@ -3916,7 +3918,9 @@ function createConversationListItemWithMenu(conversation, isPinned) {
 
     const title = document.createElement('div');
     title.className = 'conversation-title';
-    title.textContent = conversation.title || '未命名对话';
+    const titleText = conversation.title || '未命名对话';
+    title.textContent = safeTruncateText(titleText, 60);
+    title.title = titleText; // 设置完整标题以便悬停查看
     titleWrapper.appendChild(title);
 
     if (isPinned) {
@@ -4394,8 +4398,13 @@ async function showMoveToGroupSubmenu() {
         groupsCache = [];
     }
 
-    // 如果有分组，显示所有分组（排除当前分组）
+    // 如果有分组，显示所有分组（排除对话已所在的分组）
     if (groupsCache.length > 0) {
+        // 检查对话当前所在的分组ID
+        const conversationCurrentGroupId = contextMenuConversationId 
+            ? conversationGroupMappingCache[contextMenuConversationId] 
+            : null;
+        
         groupsCache.forEach(group => {
             // 验证分组对象是否有效
             if (!group || !group.id || !group.name) {
@@ -4403,8 +4412,8 @@ async function showMoveToGroupSubmenu() {
                 return;
             }
             
-            // 如果当前在分组详情页面，不显示当前分组
-            if (currentGroupId && group.id === currentGroupId) {
+            // 如果对话已经在当前分组中，不显示该分组（因为已经在里面了）
+            if (conversationCurrentGroupId && group.id === conversationCurrentGroupId) {
                 return;
             }
             
@@ -4570,15 +4579,22 @@ async function moveConversationToGroup(convId, groupId) {
             currentConversationGroupId = groupId;
         }
         
+        // 重新加载分组映射缓存，确保数据同步
+        await loadConversationGroupMapping();
+        
         // 如果当前在分组详情页面，重新加载分组对话
         if (currentGroupId) {
             // 如果从当前分组移出，或者移动到当前分组，都需要重新加载
             if (currentGroupId === oldGroupId || currentGroupId === groupId) {
-                loadGroupConversations(currentGroupId);
+                await loadGroupConversations(currentGroupId);
             }
         } else {
+            // 如果不在分组详情页面，刷新最近对话列表
             loadConversationsWithGroups();
         }
+        
+        // 如果旧分组和新分组不同，且用户正在查看旧分组，也需要刷新旧分组
+        // 但上面的逻辑已经处理了这种情况（currentGroupId === oldGroupId）
         
         // 刷新分组列表，更新高亮状态
         await loadGroups();
@@ -4718,6 +4734,45 @@ async function showBatchManageModal() {
     }
 }
 
+// 安全截断中文字符串，避免在汉字中间截断
+function safeTruncateText(text, maxLength = 50) {
+    if (!text || typeof text !== 'string') {
+        return text || '';
+    }
+    
+    // 使用 Array.from 将字符串转换为字符数组（正确处理 Unicode 代理对）
+    const chars = Array.from(text);
+    
+    // 如果文本长度未超过限制，直接返回
+    if (chars.length <= maxLength) {
+        return text;
+    }
+    
+    // 截断到最大长度（基于字符数，而不是代码单元）
+    let truncatedChars = chars.slice(0, maxLength);
+    
+    // 尝试在标点符号或空格处截断，使截断更自然
+    // 在截断点往前查找合适的断点（不超过20%的长度）
+    const searchRange = Math.floor(maxLength * 0.2);
+    const breakChars = ['，', '。', '、', ' ', ',', '.', ';', ':', '!', '?', '！', '？', '/', '\\', '-', '_'];
+    let bestBreakPos = truncatedChars.length;
+    
+    for (let i = truncatedChars.length - 1; i >= truncatedChars.length - searchRange && i >= 0; i--) {
+        if (breakChars.includes(truncatedChars[i])) {
+            bestBreakPos = i + 1; // 在标点符号后断开
+            break;
+        }
+    }
+    
+    // 如果找到合适的断点，使用它；否则使用原截断位置
+    if (bestBreakPos < truncatedChars.length) {
+        truncatedChars = truncatedChars.slice(0, bestBreakPos);
+    }
+    
+    // 将字符数组转换回字符串，并添加省略号
+    return truncatedChars.join('') + '...';
+}
+
 // 渲染批量管理对话列表
 function renderBatchConversations(filtered = null) {
     const list = document.getElementById('batch-conversations-list');
@@ -4738,7 +4793,12 @@ function renderBatchConversations(filtered = null) {
 
         const name = document.createElement('div');
         name.className = 'batch-table-col-name';
-        name.textContent = conv.title || '未命名对话';
+        const originalTitle = conv.title || '未命名对话';
+        // 使用安全截断函数，限制最大长度为45个字符（留出空间显示省略号）
+        const truncatedTitle = safeTruncateText(originalTitle, 45);
+        name.textContent = truncatedTitle;
+        // 设置title属性以显示完整文本（鼠标悬停时）
+        name.title = originalTitle;
 
         const time = document.createElement('div');
         time.className = 'batch-table-col-time';
@@ -5114,7 +5174,9 @@ async function loadGroupConversations(groupId) {
 
                 const title = document.createElement('div');
                 title.className = 'group-conversation-title';
-                title.textContent = fullConv.title || conv.title || '未命名对话';
+                const titleText = fullConv.title || conv.title || '未命名对话';
+                title.textContent = safeTruncateText(titleText, 60);
+                title.title = titleText; // 设置完整标题以便悬停查看
                 titleWrapper.appendChild(title);
 
                 // 如果对话在分组中置顶，显示置顶图标

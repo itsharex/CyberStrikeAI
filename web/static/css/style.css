@@ -5427,8 +5427,10 @@ header {
     font-size: 0.875rem;
     color: var(--text-primary);
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     white-space: nowrap;
+    word-break: keep-all;
+    /* 完全依赖JavaScript截断，禁用CSS的ellipsis以避免在UTF-8多字节字符中间截断 */
 }
 
 .batch-table-col-time {

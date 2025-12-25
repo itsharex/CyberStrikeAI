@@ -195,10 +195,21 @@ func (db *DB) DeleteGroup(id string) error {
 }
 
 // AddConversationToGroup 将对话添加到分组
+// 注意：一个对话只能属于一个分组，所以在添加新分组之前，会先删除该对话的所有旧分组关联
 func (db *DB) AddConversationToGroup(conversationID, groupID string) error {
-	id := uuid.New().String()
+	// 先删除该对话的所有旧分组关联，确保一个对话只属于一个分组
 	_, err := db.Exec(
-		"INSERT OR REPLACE INTO conversation_group_mappings (id, conversation_id, group_id, created_at) VALUES (?, ?, ?, ?)",
+		"DELETE FROM conversation_group_mappings WHERE conversation_id = ?",
+		conversationID,
+	)
+	if err != nil {
+		return fmt.Errorf("删除对话旧分组关联失败: %w", err)
+	}
+	
+	// 然后插入新的分组关联
+	id := uuid.New().String()
+	_, err = db.Exec(
+		"INSERT INTO conversation_group_mappings (id, conversation_id, group_id, created_at) VALUES (?, ?, ?, ?)",
 		id, conversationID, groupID, time.Now(),
 	)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 	"time"
 
 	"cyberstrike-ai/internal/agent"
@@ -15,6 +16,47 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// safeTruncateString 安全截断字符串，避免在 UTF-8 字符中间截断
+func safeTruncateString(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	
+	// 将字符串转换为 rune 切片以正确计算字符数
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	
+	// 截断到最大长度
+	truncated := string(runes[:maxLen])
+	
+	// 尝试在标点符号或空格处截断，使截断更自然
+	// 在截断点往前查找合适的断点（不超过20%的长度）
+	searchRange := maxLen / 5
+	if searchRange > maxLen {
+		searchRange = maxLen
+	}
+	breakChars := []rune("，。、 ,.;:!?！？/\\-_")
+	bestBreakPos := len(runes[:maxLen])
+	
+	for i := bestBreakPos - 1; i >= bestBreakPos-searchRange && i >= 0; i-- {
+		for _, breakChar := range breakChars {
+			if runes[i] == breakChar {
+				bestBreakPos = i + 1 // 在标点符号后断开
+				goto found
+			}
+		}
+	}
+	
+found:
+	truncated = string(runes[:bestBreakPos])
+	return truncated + "..."
+}
 
 // AgentHandler Agent处理器
 type AgentHandler struct {
@@ -74,10 +116,7 @@ func (h *AgentHandler) AgentLoop(c *gin.Context) {
 	// 如果没有对话ID，创建新对话
 	conversationID := req.ConversationID
 	if conversationID == "" {
-		title := req.Message
-		if len(title) > 50 {
-			title = title[:50] + "..."
-		}
+		title := safeTruncateString(req.Message, 50)
 		conv, err := h.db.CreateConversation(title)
 		if err != nil {
 			h.logger.Error("创建对话失败", zap.Error(err))
@@ -237,10 +276,7 @@ func (h *AgentHandler) AgentLoopStream(c *gin.Context) {
 	// 如果没有对话ID，创建新对话
 	conversationID := req.ConversationID
 	if conversationID == "" {
-		title := req.Message
-		if len(title) > 50 {
-			title = title[:50] + "..."
-		}
+		title := safeTruncateString(req.Message, 50)
 		conv, err := h.db.CreateConversation(title)
 		if err != nil {
 			h.logger.Error("创建对话失败", zap.Error(err))
