@@ -368,11 +368,28 @@ func (r *Retriever) Search(ctx context.Context, req *SearchRequest) ([]*Retrieva
 	// 注意：hybridWeight可以是0.0（纯关键词检索），所以不设置默认值
 	// 如果配置文件中未设置，应该在配置加载时使用默认值
 	hybridWeight := r.config.HybridWeight
+	// 如果未设置，使用默认值0.7（偏重向量检索）
+	if hybridWeight < 0 || hybridWeight > 1 {
+		r.logger.Warn("混合权重超出范围，使用默认值0.7",
+			zap.Float64("provided", hybridWeight))
+		hybridWeight = 0.7
+	}
 
 	// 先计算混合分数并存储在candidate中，用于排序
 	for i := range candidates {
 		normalizedBM25 := math.Min(candidates[i].bm25Score, 1.0)
 		candidates[i].hybridScore = hybridWeight*candidates[i].similarity + (1-hybridWeight)*normalizedBM25
+
+		// 调试日志：记录前几个候选的分数计算（仅在debug级别）
+		if i < 3 {
+			r.logger.Debug("混合分数计算",
+				zap.Int("index", i),
+				zap.Float64("similarity", candidates[i].similarity),
+				zap.Float64("bm25Score", candidates[i].bm25Score),
+				zap.Float64("normalizedBM25", normalizedBM25),
+				zap.Float64("hybridWeight", hybridWeight),
+				zap.Float64("hybridScore", candidates[i].hybridScore))
+		}
 	}
 
 	// 根据混合分数重新排序（这才是真正的混合检索）
@@ -520,20 +537,31 @@ func (r *Retriever) expandContext(ctx context.Context, results []*RetrievalResul
 		}
 
 		// 添加去重后的相关chunk
-		// 使用该文档中相似度最高的结果作为参考
+		// 使用该文档中混合分数最高的结果作为参考
+		maxScore := 0.0
 		maxSimilarity := 0.0
 		for _, result := range itemResults {
+			if result.Score > maxScore {
+				maxScore = result.Score
+			}
 			if result.Similarity > maxSimilarity {
 				maxSimilarity = result.Similarity
 			}
 		}
 
+		// 计算扩展chunk的混合分数（使用相同的混合权重）
+		hybridWeight := r.config.HybridWeight
+		expandedSimilarity := maxSimilarity * 0.8 // 相关chunk的相似度略低
+		// 对于扩展的chunk，BM25分数设为0（因为它们是上下文扩展，不是直接匹配）
+		expandedBM25 := 0.0
+		expandedScore := hybridWeight*expandedSimilarity + (1-hybridWeight)*expandedBM25
+
 		for _, relatedChunk := range relatedChunksList {
 			expandedResult := &RetrievalResult{
 				Chunk:      relatedChunk,
 				Item:       itemResults[0].Item, // 使用第一个结果的Item信息
-				Similarity: maxSimilarity * 0.8, // 相关chunk的相似度略低
-				Score:      maxSimilarity * 0.8,
+				Similarity: expandedSimilarity,
+				Score:      expandedScore, // 使用正确的混合分数
 			}
 			expandedResults = append(expandedResults, expandedResult)
 			processedChunkIDs[relatedChunk.ID] = true
