@@ -334,7 +334,7 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 
 ## 核心目标
 
-构建一个能够讲述完整攻击故事的攻击链（通常8-15个节点，必要时可适当增加），让学习者能够：
+构建一个能够讲述完整攻击故事的攻击链让学习者能够：
 1. 理解渗透测试的完整流程和思维逻辑（从目标识别到漏洞发现的每一步）
 2. 学习如何从失败中获取线索并调整策略
 3. 掌握工具使用的实际效果和局限性
@@ -358,11 +358,15 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 - **vulnerability节点**：每个真实确认的漏洞创建一个vulnerability节点
 - **完整性检查**：对照ReAct输入中的工具调用序列，确保每个有意义的工具执行都被包含在攻击链中
 
-### 第三步：构建逻辑关系
-按照时间顺序和因果关系连接节点：
+### 第三步：构建逻辑关系（树状结构）
+**重要：必须构建树状结构，而不是简单的线性链。**
+按照因果关系连接节点，形成树状图（因为是单agent执行，所以可以不按照时间顺序）：
+- **分支结构**：一个节点可以有多个后续节点（例如：端口扫描发现多个端口后，可以同时进行多个不同的测试）
+- **汇聚结构**：多个节点可以指向同一个节点（例如：多个不同的测试都发现了同一个漏洞）
 - 识别哪些action是基于前面action的结果而执行的
 - 识别哪些vulnerability是由哪些action发现的
 - 识别失败节点如何为后续成功提供线索
+- **避免线性链**：不要将所有节点连成一条线，应该根据实际的并行测试和分支探索构建树状结构
 
 ### 第四步：优化和精简
 - **完整性检查**：确保所有有意义的工具执行都被包含，不要遗漏关键步骤
@@ -449,10 +453,12 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 ### 边的类型
 - **leads_to**：表示"导致"或"引导到"，用于action→action、target→action
   * 例如：端口扫描 → 目录扫描（因为发现了80端口，所以进行目录扫描）
-- **discovers**：表示"发现"，用于action→vulnerability
+- **discovers**：表示"发现"，**专门用于action→vulnerability**
   * 例如：SQL注入测试 → SQL注入漏洞
-- **enables**：表示"使能"或"促成"，用于vulnerability→vulnerability、action→action（当后续行动依赖前面结果时）
+  * **重要**：所有action→vulnerability的边都必须使用discovers类型，即使多个action都指向同一个vulnerability，也应该统一使用discovers
+- **enables**：表示"使能"或"促成"，**仅用于vulnerability→vulnerability、action→action（当后续行动依赖前面结果时）**
   * 例如：信息泄露漏洞 → 权限提升漏洞（通过信息泄露获得的信息促成了权限提升）
+  * **重要**：enables不能用于action→vulnerability，action→vulnerability必须使用discovers
 
 ### 边的权重
 - **权重1-2**：弱关联（如初步探测到进一步探测）
@@ -460,10 +466,14 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 - **权重5-7**：强关联（如发现漏洞、关键信息泄露）
 - **权重8-10**：极强关联（如漏洞利用成功、权限提升）
 
-### DAG结构要求
+### DAG结构要求（树状图）
 - 所有边的source节点id必须小于target节点id（确保无环）
 - 节点id从"node_1"开始递增
 - 确保无孤立节点（每个节点至少有一条边连接）
+- **树状结构要求**：
+  * 一个节点可以有多个后续节点（分支），例如：端口扫描节点可以同时连接到"Web服务识别"、"FTP服务识别"、"SSH服务识别"等多个节点
+  * 多个节点可以汇聚到一个节点（汇聚），例如：多个不同的测试都指向同一个漏洞节点
+  * 避免将所有节点连成一条线，应该根据实际的并行测试和分支探索构建树状结构
 
 ## 攻击链逻辑连贯性要求
 
@@ -486,6 +496,8 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 ## 输出格式
 
 严格按照以下JSON格式输出，不要添加任何其他文字：
+
+**重要：示例展示的是树状结构，注意node_2（端口扫描）同时连接到多个后续节点（node_3、node_4），形成分支结构。**
 
 {
    "nodes": [
@@ -513,30 +525,42 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
      {
        "id": "node_3",
        "type": "action",
-       "label": "尝试SQL注入（被WAF拦截）",
-       "risk_score": 0,
-       "metadata": {
-         "tool_name": "sqlmap",
-         "tool_intent": "SQL注入检测",
-         "ai_analysis": "对/login.php进行SQL注入测试时被WAF拦截，返回403错误。错误信息显示检测到Cloudflare防护。这表明目标部署了WAF，需要调整测试策略，可尝试绕过技术或寻找其他未受保护的攻击面。",
-         "findings": ["WAF拦截", "返回403", "检测到Cloudflare", "目标部署WAF"],
-         "status": "failed_insight"
-       }
-     },
-     {
-       "id": "node_4",
-       "type": "action",
        "label": "目录扫描发现/admin后台",
        "risk_score": 0,
        "metadata": {
          "tool_name": "dirsearch",
          "tool_intent": "目录扫描",
-         "ai_analysis": "使用dirsearch对目标进行目录扫描，发现/admin目录存在且可访问。该目录可能为管理后台，是重要的测试目标。结合之前发现的WAF防护，可以尝试对/admin目录进行绕过测试。",
+         "ai_analysis": "使用dirsearch对目标进行目录扫描，发现/admin目录存在且可访问。该目录可能为管理后台，是重要的测试目标。",
          "findings": ["/admin目录存在", "返回200状态码", "疑似管理后台"]
        }
      },
      {
+       "id": "node_4",
+       "type": "action",
+       "label": "识别Web服务为Apache 2.4",
+       "risk_score": 0,
+       "metadata": {
+         "tool_name": "whatweb",
+         "tool_intent": "Web服务识别",
+         "ai_analysis": "识别出目标运行Apache 2.4服务器，这为后续的漏洞测试提供了重要信息。",
+         "findings": ["Apache 2.4", "PHP版本信息"]
+       }
+     },
+     {
        "id": "node_5",
+       "type": "action",
+       "label": "尝试SQL注入（被WAF拦截）",
+       "risk_score": 0,
+       "metadata": {
+         "tool_name": "sqlmap",
+         "tool_intent": "SQL注入检测",
+         "ai_analysis": "对/login.php进行SQL注入测试时被WAF拦截，返回403错误。错误信息显示检测到Cloudflare防护。这表明目标部署了WAF，需要调整测试策略。",
+         "findings": ["WAF拦截", "返回403", "检测到Cloudflare", "目标部署WAF"],
+         "status": "failed_insight"
+       }
+     },
+     {
+       "id": "node_6",
        "type": "vulnerability",
        "label": "SQL注入漏洞",
        "risk_score": 85,
@@ -559,17 +583,23 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
        "source": "node_2",
        "target": "node_3",
        "type": "leads_to",
+       "weight": 4
+     },
+     {
+       "source": "node_2",
+       "target": "node_4",
+       "type": "leads_to",
        "weight": 3
      },
      {
        "source": "node_3",
-       "target": "node_4",
+       "target": "node_5",
        "type": "leads_to",
        "weight": 4
      },
      {
-       "source": "node_4",
-       "target": "node_5",
+       "source": "node_5",
+       "target": "node_6",
        "type": "discovers",
        "weight": 7
      }
@@ -579,12 +609,13 @@ func (b *Builder) buildSimplePrompt(reactInput, modelOutput string) string {
 ## 重要提醒
 
 1. **严禁杜撰**：只使用ReAct输入中实际执行的工具和实际返回的结果。如无实际数据，返回空的nodes和edges数组。
-2. **完整性优先**：必须包含所有有意义的工具执行和关键步骤，不要为了控制节点数量而删除重要节点。攻击链必须能够完整展现从目标识别到漏洞发现的完整过程。
-3. **逻辑连贯**：确保攻击链能够讲述一个完整、连贯的渗透测试故事，包括所有关键步骤和决策点。
-4. **教育价值**：优先保留有教育意义的节点，帮助学习者理解渗透测试思维和完整流程。
-5. **准确性**：所有节点信息必须基于实际数据，不要推测或假设。
-6. **完整性检查**：确保每个节点都有必要的metadata字段，每条边都有正确的source和target，没有孤立节点。
-7. **不要过度精简**：如果实际执行步骤较多，可以适当增加节点数量（最多20个），确保不遗漏关键步骤。
+2. **树状结构优先**：必须构建树状结构，而不是线性链。一个节点可以有多个后续节点（分支），多个节点可以指向同一个节点（汇聚）。避免将所有节点连成一条线。
+3. **完整性优先**：必须包含所有有意义的工具执行和关键步骤，不要为了控制节点数量而删除重要节点。攻击链必须能够完整展现从目标识别到漏洞发现的完整过程。
+4. **逻辑连贯**：确保攻击链能够讲述一个完整、连贯的渗透测试故事，包括所有关键步骤和决策点。
+5. **教育价值**：优先保留有教育意义的节点，帮助学习者理解渗透测试思维和完整流程。
+6. **准确性**：所有节点信息必须基于实际数据，不要推测或假设。
+7. **完整性检查**：确保每个节点都有必要的metadata字段，每条边都有正确的source和target，没有孤立节点。
+8. **不要过度精简**：如果实际执行步骤较多，可以适当增加节点数量（最多20个），确保不遗漏关键步骤。
 
 现在开始分析并构建攻击链：`, reactInput, modelOutput)
 }

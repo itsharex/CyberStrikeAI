@@ -2026,13 +2026,13 @@ function renderAttackChain(chainData) {
                     // 根据节点类型调整大小，target节点更大（增加高度以容纳类型标签）
                     'width': function(ele) {
                         const type = ele.data('type');
-                        if (type === 'target') return isComplexGraph ? 240 : 260;
-                        return isComplexGraph ? 220 : 240;
+                        if (type === 'target') return isComplexGraph ? 380 : 420;
+                        return isComplexGraph ? 360 : 400;
                     },
                     'height': function(ele) {
                         const type = ele.data('type');
-                        if (type === 'target') return isComplexGraph ? 115 : 125;
-                        return isComplexGraph ? 110 : 120;
+                        if (type === 'target') return isComplexGraph ? 180 : 200;
+                        return isComplexGraph ? 170 : 190;
                     },
                     'shape': function(ele) {
                         // 所有节点都使用圆角矩形
@@ -2044,7 +2044,7 @@ function renderAttackChain(chainData) {
                         
                         // target节点使用更深的蓝色背景，增强对比度
                         if (type === 'target') {
-                            return '#bbdefb';  // 更深的浅蓝色
+                            return '#e8f4fd';  // 更亮的蓝色背景，提高对比度
                         }
                         
                         // action节点根据执行有效性显示不同颜色
@@ -2058,30 +2058,30 @@ function renderAttackChain(chainData) {
                             const isFailedInsight = status === 'failed_insight';
                             
                             if (hasFindings && !isFailedInsight) {
-                                return '#e8f5e9';  // 浅绿色：有效执行
+                                return '#f5fbf5';  // 更亮的绿色背景，提高对比度
                             } else {
-                                return '#f5f5f5';  // 浅灰色：无效执行
+                                return '#fafafa';  // 浅灰色背景，与白色文字形成对比
                             }
                         }
                         
-                        // vulnerability节点根据风险分数显示不同颜色
+                        // vulnerability节点根据风险分数显示不同颜色，使用更亮的背景
                         if (type === 'vulnerability') {
-                            if (riskScore >= 80) return '#ffcdd2';  // 更饱和的浅红色
-                            if (riskScore >= 60) return '#ffe0b2';  // 更饱和的浅橙色
-                            if (riskScore >= 40) return '#fff9c4';  // 更饱和的浅黄色
-                            return '#dcedc8';  // 更饱和的浅绿色
+                            if (riskScore >= 80) return '#fff0f0';  // 更亮的红色背景
+                            if (riskScore >= 60) return '#fff5e6';  // 更亮的橙色背景
+                            if (riskScore >= 40) return '#fffef0';  // 更亮的黄色背景
+                            return '#f5fbf5';  // 更亮的绿色背景
                         }
                         
-                        return '#f5f5f5';  // 默认浅灰色
+                        return '#ffffff';  // 默认白色背景
                     },
-                    // 根据节点类型和风险分数设置文字颜色
+                    // 根据节点类型和风险分数设置文字颜色，使用更深的颜色提高对比度
                     // 注意：由于标签包含类型标签和内容，颜色适用于所有文本
                     'color': function(ele) {
                         const type = ele.data('type');
                         const riskScore = ele.data('riskScore') || 0;
                         
                         if (type === 'target') {
-                            return '#1976d2';  // 深蓝色文字
+                            return '#0d47a1';  // 更深的蓝色文字，提高对比度
                         }
                         
                         // action节点根据执行有效性显示不同文字颜色
@@ -2095,54 +2095,54 @@ function renderAttackChain(chainData) {
                             const isFailedInsight = status === 'failed_insight';
                             
                             if (hasFindings && !isFailedInsight) {
-                                return '#2e7d32';  // 深绿色：有效执行
+                                return '#1b5e20';  // 更深的绿色：有效执行，提高对比度
                             } else {
-                                return '#757575';  // 深灰色：无效执行
+                                return '#212121';  // 深灰色：无效执行，提高对比度
                             }
                         }
                         
-                        // vulnerability节点根据风险分数显示不同文字颜色
+                        // vulnerability节点根据风险分数显示不同文字颜色，使用更深的颜色
                         if (type === 'vulnerability') {
-                            if (riskScore >= 80) return '#c62828';  // 深红色
-                            if (riskScore >= 60) return '#e65100';  // 深橙色
-                            if (riskScore >= 40) return '#f57f17';  // 深黄色
-                            return '#558b2f';  // 深绿色
+                            if (riskScore >= 80) return '#b71c1c';  // 更深的红色，提高对比度
+                            if (riskScore >= 60) return '#bf360c';  // 更深的橙色，提高对比度
+                            if (riskScore >= 40) return '#e65100';  // 更深的黄色，提高对比度
+                            return '#33691e';  // 更深的绿色，提高对比度
                         }
                         
-                        return '#424242';  // 默认深灰色
+                        return '#000000';  // 黑色，最高对比度
                     },
                     'font-size': function(ele) {
-                        // 由于标签包含类型标签和内容，使用合适的字体大小
+                        // 进一步增大字体，提高可读性
                         const type = ele.data('type');
-                        if (type === 'target') return isComplexGraph ? '16px' : '18px';
-                        return isComplexGraph ? '15px' : '17px';
+                        if (type === 'target') return isComplexGraph ? '20px' : '22px';
+                        return isComplexGraph ? '19px' : '21px';
                     },
-                    'font-weight': '600',
+                    'font-weight': 'bold',  // 加粗字体，提高可读性
                     'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'text-wrap': 'wrap',
                     'text-max-width': function(ele) {
                         const type = ele.data('type');
-                        if (type === 'target') return isComplexGraph ? '220px' : '240px';
-                        return isComplexGraph ? '200px' : '220px';
+                        if (type === 'target') return isComplexGraph ? '340px' : '380px';
+                        return isComplexGraph ? '320px' : '360px';
                     },
                     'text-overflow-wrap': 'anywhere',
-                    'text-margin-y': 3,  // 调整垂直边距以适应多行文本
-                    'padding': '14px',  // 增加内边距，使节点内容更有呼吸感和现代感
+                    'text-margin-y': 5,  // 调整垂直边距以适应多行文本
+                    'padding': '18px',  // 进一步增加内边距，使节点内容更有呼吸感
+                    'line-height': 1.6,  // 增加行高，提高可读性
                     // 根据节点类型设置边框样式，使用更粗的边框增强视觉效果
                     'border-width': function(ele) {
                         const type = ele.data('type');
-                        if (type === 'target') return 5;
-                        return 4;
+                        if (type === 'target') return 6;
+                        return 5;
                     },
-                    'border-radius': '12px',  // 所有节点都使用圆角
                     'border-color': function(ele) {
                         const type = ele.data('type');
                         const riskScore = ele.data('riskScore') || 0;
                         
                         if (type === 'target') {
-                            return '#1976d2';  // 蓝色边框
+                            return '#1565c0';  // 更深的蓝色边框，提高对比度
                         }
                         
                         // action节点根据执行有效性显示不同边框颜色
@@ -2156,38 +2156,26 @@ function renderAttackChain(chainData) {
                             const isFailedInsight = status === 'failed_insight';
                             
                             if (hasFindings && !isFailedInsight) {
-                                return '#66bb6a';  // 绿色边框：有效执行
+                                return '#4caf50';  // 更深的绿色边框：有效执行，提高对比度
                             } else {
-                                return '#9e9e9e';  // 灰色边框：无效执行
+                                return '#757575';  // 更深的灰色边框：无效执行，提高对比度
                             }
                         }
                         
-                        // vulnerability节点根据风险分数显示不同边框颜色
+                        // vulnerability节点根据风险分数显示不同边框颜色，使用更深的颜色
                         if (type === 'vulnerability') {
-                            if (riskScore >= 80) return '#d32f2f';  // 红色边框
-                            if (riskScore >= 60) return '#f57c00';  // 橙色边框
-                            if (riskScore >= 40) return '#fbc02d';  // 黄色边框
-                            return '#689f38';  // 绿色边框
+                            if (riskScore >= 80) return '#b71c1c';  // 更深的红色边框，提高对比度
+                            if (riskScore >= 60) return '#bf360c';  // 更深的橙色边框，提高对比度
+                            if (riskScore >= 40) return '#e65100';  // 更深的黄色边框，提高对比度
+                            return '#33691e';  // 更深的绿色边框，提高对比度
                         }
                         
-                        return '#9e9e9e';  // 默认灰色边框
+                        return '#616161';  // 更深的默认灰色边框，提高对比度
                     },
-                    'border-style': function(ele) {
-                        const type = ele.data('type');
-                        // action节点使用虚线边框，其他使用实线
-                        if (type === 'action') return 'dashed';
-                        return 'solid';
-                    },
+                    'border-style': 'solid',  // 统一使用实线边框，提高可读性
                     'overlay-padding': '12px',
                     // 移除文字轮廓，使用纯色文字
                     'text-outline-width': 0,
-                    // 增强阴影效果，使节点更立体更有层次感
-                    // 增强阴影效果，使节点更立体更有层次感（使用更柔和的阴影）
-                    'shadow-blur': 20,
-                    'shadow-opacity': 0.25,
-                    'shadow-offset-x': 2,
-                    'shadow-offset-y': 6,
-                    'shadow-color': 'rgba(0, 0, 0, 0.15)',
                     'background-opacity': 1
                 }
             },
@@ -2213,7 +2201,6 @@ function renderAttackChain(chainData) {
                         return '#9e9e9e';
                     },
                     'target-arrow-shape': 'triangle',
-                    'target-arrow-size': 8,
                     // 使用bezier曲线，更美观
                     'curve-style': 'bezier',
                     'control-point-step-size': 60,  // 增加步长，让控制点分布更均匀
@@ -2231,13 +2218,7 @@ function renderAttackChain(chainData) {
                         const type = ele.data('type');
                         if (type === 'targets') return [8, 4];  // 虚线模式
                         return [];
-                    },
-                    // 添加边的阴影效果（浅色主题使用浅阴影）
-                    'shadow-blur': 3,
-                    'shadow-opacity': 0.1,
-                    'shadow-offset-x': 1,
-                    'shadow-offset-y': 1,
-                    'shadow-color': '#000000'
+                    }
                 }
             },
             {
@@ -2245,28 +2226,10 @@ function renderAttackChain(chainData) {
                 style: {
                     'border-width': 5,
                     'border-color': '#0066ff',
-                    'shadow-blur': 16,
-                    'shadow-opacity': 0.6,
-                    'shadow-offset-x': 4,
-                    'shadow-offset-y': 5,
-                    'shadow-color': '#0066ff',
                     'z-index': 999,
                     'opacity': 1,
                     'overlay-opacity': 0.1,
                     'overlay-color': '#0066ff'
-                }
-            },
-            {
-                selector: 'node:hover',
-                style: {
-                    'border-width': 5,
-                    'shadow-blur': 14,
-                    'shadow-opacity': 0.5,
-                    'shadow-offset-x': 3,
-                    'shadow-offset-y': 4,
-                    'z-index': 998,
-                    'overlay-opacity': 0.05,
-                    'overlay-color': '#333333'
                 }
             }
         ],
@@ -2294,8 +2257,8 @@ function renderAttackChain(chainData) {
             const containerHeight = container ? container.offsetHeight : 800;
             
             // 计算平均节点宽度（考虑不同类型节点的平均尺寸）
-            const avgNodeWidth = isComplexGraph ? 230 : 250;  // 基于新的节点尺寸
-            const avgNodeHeight = isComplexGraph ? 97.5 : 107.5;
+            const avgNodeWidth = isComplexGraph ? 370 : 410;  // 进一步增大节点尺寸
+            const avgNodeHeight = isComplexGraph ? 175 : 195;
             
             // 计算图的层级深度（估算）
             const estimatedDepth = Math.ceil(Math.log2(Math.max(nodeCount, 2))) + 1;
@@ -2317,13 +2280,13 @@ function renderAttackChain(chainData) {
             );
             
             // 动态计算层级间距：基于容器高度和层级数
-            // 大幅增加最小间距，避免节点重合
+            // 减小垂直间距，让节点更紧凑，同时节点更大更易读
             const targetGraphHeight = containerHeight * 0.85;
             const calculatedRankSep = Math.max(
-                avgNodeHeight * 2.5,  // 最小为节点高度的2.5倍，确保垂直方向有足够间距
+                avgNodeHeight * 1.3,  // 减小到节点高度的1.3倍，让节点更紧凑
                 Math.min(
                     targetGraphHeight / Math.max(estimatedDepth - 1, 1),
-                    avgNodeHeight * 4.0  // 最大不超过节点高度的4.0倍
+                    avgNodeHeight * 2.0  // 最大不超过节点高度的2.0倍
                 )
             );
             
@@ -2380,7 +2343,7 @@ function renderAttackChain(chainData) {
             // 动态计算节点间距，基于容器尺寸
             const container = attackChainCytoscape.container();
             const containerWidth = container ? container.offsetWidth : 1200;
-            const avgNodeWidth = isComplexGraph ? 230 : 250;
+            const avgNodeWidth = isComplexGraph ? 370 : 410;  // 与布局计算保持一致
             const estimatedDepth = Math.ceil(Math.log2(Math.max(nodeCount, 2))) + 1;
             const maxLevelWidth = Math.max(1, Math.ceil(nodeCount / estimatedDepth));
             const targetGraphWidth = containerWidth * 0.95;  // 与布局计算保持一致，使用95%宽度
@@ -2827,7 +2790,24 @@ function renderAttackChain(chainData) {
         showNodeDetails(node.data());
     });
     
-    // 悬停渐变效果已移除
+    // 添加悬停效果（使用事件监听器替代CSS选择器）
+    attackChainCytoscape.on('mouseover', 'node', function(evt) {
+        const node = evt.target;
+        node.style('border-width', 5);
+        node.style('z-index', 998);
+        node.style('overlay-opacity', 0.05);
+        node.style('overlay-color', '#333333');
+    });
+    
+    attackChainCytoscape.on('mouseout', 'node', function(evt) {
+        const node = evt.target;
+        const type = node.data('type');
+        // 恢复默认边框宽度
+        const defaultBorderWidth = type === 'target' ? 5 : 4;
+        node.style('border-width', defaultBorderWidth);
+        node.style('z-index', 'auto');
+        node.style('overlay-opacity', 0);
+    });
     
     // 保存原始数据用于过滤
     window.attackChainOriginalData = chainData;
@@ -3046,7 +3026,14 @@ function showNodeDetails(nodeData) {
         return;
     }
     
-    detailsPanel.style.display = 'block';
+    // 使用 requestAnimationFrame 优化显示动画
+    requestAnimationFrame(() => {
+        detailsPanel.style.display = 'flex';
+        // 在下一帧设置透明度，确保显示动画流畅
+        requestAnimationFrame(() => {
+            detailsPanel.style.opacity = '1';
+        });
+    });
     
     let html = `
         <div class="node-detail-item">
@@ -3154,16 +3141,39 @@ function showNodeDetails(nodeData) {
         `;
     }
     
-    if (nodeData.metadata && Object.keys(nodeData.metadata).length > 0) {
-        html += `
-            <div class="node-detail-item">
-                <strong>完整元数据:</strong>
-                <pre class="metadata-pre">${JSON.stringify(nodeData.metadata, null, 2)}</pre>
-            </div>
-        `;
+    // 先重置滚动位置，避免内容更新时的滚动计算
+    if (detailsContent) {
+        detailsContent.scrollTop = 0;
     }
     
-    detailsContent.innerHTML = html;
+    // 使用 requestAnimationFrame 优化 DOM 更新和滚动
+    requestAnimationFrame(() => {
+        // 更新内容
+        detailsContent.innerHTML = html;
+        
+        // 在下一帧执行滚动，避免与 DOM 更新冲突
+        requestAnimationFrame(() => {
+            // 重置详情内容区域的滚动位置
+            if (detailsContent) {
+                detailsContent.scrollTop = 0;
+            }
+            
+            // 重置侧边栏的滚动位置，确保详情区域可见
+            const sidebar = document.querySelector('.attack-chain-sidebar-content');
+            if (sidebar) {
+                // 找到详情面板的位置
+                const detailsPanel = document.getElementById('attack-chain-details');
+                if (detailsPanel && detailsPanel.offsetParent !== null) {
+                    // 使用 getBoundingClientRect 获取位置，性能更好
+                    const detailsRect = detailsPanel.getBoundingClientRect();
+                    const sidebarRect = sidebar.getBoundingClientRect();
+                    const scrollTop = sidebar.scrollTop;
+                    const relativeTop = detailsRect.top - sidebarRect.top + scrollTop;
+                    sidebar.scrollTop = relativeTop - 20; // 留一点边距
+                }
+            }
+        });
+    });
 }
 
 // 获取严重程度颜色
@@ -3197,12 +3207,36 @@ function updateAttackChainStats(chainData) {
     }
 }
 
+// 关闭节点详情
+function closeNodeDetails() {
+    const detailsPanel = document.getElementById('attack-chain-details');
+    if (detailsPanel) {
+        // 添加淡出动画
+        detailsPanel.style.opacity = '0';
+        detailsPanel.style.maxHeight = detailsPanel.scrollHeight + 'px';
+        
+        setTimeout(() => {
+            detailsPanel.style.display = 'none';
+            detailsPanel.style.maxHeight = '';
+            detailsPanel.style.opacity = '';
+        }, 300);
+    }
+    
+    // 取消选中节点
+    if (attackChainCytoscape) {
+        attackChainCytoscape.elements().unselect();
+    }
+}
+
 // 关闭攻击链模态框
 function closeAttackChainModal() {
     const modal = document.getElementById('attack-chain-modal');
     if (modal) {
         modal.style.display = 'none';
     }
+    
+    // 关闭节点详情
+    closeNodeDetails();
     
     // 清理Cytoscape实例
     if (attackChainCytoscape) {
