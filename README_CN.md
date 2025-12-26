@@ -330,6 +330,11 @@ CyberStrikeAI/
 - 2025-11-14 —— 工具检索 O(1)、执行记录清理、数据库分页优化。
 - 2025-11-13 —— Web 鉴权、Settings 面板与 MCP stdio 模式发布。
 
+## 404星链计划 
+<img src="./img/404StarLinkLogo.png" width="30%">
+
+CyberStrikeAI 现已加入 [404星链计划](https://github.com/knownsec/404StarLink)
+
 ---
 
 欢迎提交 Issue/PR 贡献新的工具模版或优化建议！
