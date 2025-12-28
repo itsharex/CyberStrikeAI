@@ -70,10 +70,15 @@ func (db *DB) SaveToolExecution(exec *mcp.ToolExecution) error {
 }
 
 // CountToolExecutions 统计工具执行记录总数
-func (db *DB) CountToolExecutions() (int, error) {
+func (db *DB) CountToolExecutions(status string) (int, error) {
 	query := `SELECT COUNT(*) FROM tool_executions`
+	args := []interface{}{}
+	if status != "" {
+		query += ` WHERE status = ?`
+		args = append(args, status)
+	}
 	var count int
-	err := db.QueryRow(query).Scan(&count)
+	err := db.QueryRow(query, args...).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -82,13 +87,14 @@ func (db *DB) CountToolExecutions() (int, error) {
 
 // LoadToolExecutions 加载所有工具执行记录（支持分页）
 func (db *DB) LoadToolExecutions() ([]*mcp.ToolExecution, error) {
-	return db.LoadToolExecutionsWithPagination(0, 1000)
+	return db.LoadToolExecutionsWithPagination(0, 1000, "")
 }
 
 // LoadToolExecutionsWithPagination 分页加载工具执行记录
 // limit: 最大返回记录数，0 表示使用默认值 1000
 // offset: 跳过的记录数，用于分页
-func (db *DB) LoadToolExecutionsWithPagination(offset, limit int) ([]*mcp.ToolExecution, error) {
+// status: 状态筛选，空字符串表示不过滤
+func (db *DB) LoadToolExecutionsWithPagination(offset, limit int, status string) ([]*mcp.ToolExecution, error) {
 	if limit <= 0 {
 		limit = 1000 // 默认限制
 	}
@@ -99,11 +105,16 @@ func (db *DB) LoadToolExecutionsWithPagination(offset, limit int) ([]*mcp.ToolEx
 	query := `
 		SELECT id, tool_name, arguments, status, result, error, start_time, end_time, duration_ms
 		FROM tool_executions
-		ORDER BY start_time DESC
-		LIMIT ? OFFSET ?
 	`
+	args := []interface{}{}
+	if status != "" {
+		query += ` WHERE status = ?`
+		args = append(args, status)
+	}
+	query += ` ORDER BY start_time DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
 
-	rows, err := db.Query(query, limit, offset)
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -972,7 +972,17 @@ async function refreshMonitorPanel(page = null) {
         const currentPage = page !== null ? page : monitorState.pagination.page;
         const pageSize = monitorState.pagination.pageSize;
         
-        const response = await apiFetch(`/api/monitor?page=${currentPage}&page_size=${pageSize}`, { method: 'GET' });
+        // 获取当前的筛选条件
+        const statusFilter = document.getElementById('monitor-status-filter');
+        const currentFilter = statusFilter ? statusFilter.value : 'all';
+        
+        // 构建请求 URL
+        let url = `/api/monitor?page=${currentPage}&page_size=${pageSize}`;
+        if (currentFilter && currentFilter !== 'all') {
+            url += `&status=${encodeURIComponent(currentFilter)}`;
+        }
+        
+        const response = await apiFetch(url, { method: 'GET' });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
             throw new Error(result.error || '获取监控数据失败');
@@ -993,7 +1003,7 @@ async function refreshMonitorPanel(page = null) {
         }
 
         renderMonitorStats(monitorState.stats, monitorState.lastFetchedAt);
-        renderMonitorExecutions(monitorState.executions);
+        renderMonitorExecutions(monitorState.executions, currentFilter);
         renderMonitorPagination();
     } catch (error) {
         console.error('刷新监控面板失败:', error);
@@ -1006,10 +1016,59 @@ async function refreshMonitorPanel(page = null) {
     }
 }
 
-function applyMonitorFilters() {
+async function applyMonitorFilters() {
     const statusFilter = document.getElementById('monitor-status-filter');
     const status = statusFilter ? statusFilter.value : 'all';
-    renderMonitorExecutions(monitorState.executions, status);
+    // 当筛选条件改变时，从后端重新获取数据
+    await refreshMonitorPanelWithFilter(status);
+}
+
+async function refreshMonitorPanelWithFilter(statusFilter = 'all') {
+    const statsContainer = document.getElementById('monitor-stats');
+    const execContainer = document.getElementById('monitor-executions');
+
+    try {
+        const currentPage = 1; // 筛选时重置到第一页
+        const pageSize = monitorState.pagination.pageSize;
+        
+        // 构建请求 URL
+        let url = `/api/monitor?page=${currentPage}&page_size=${pageSize}`;
+        if (statusFilter && statusFilter !== 'all') {
+            url += `&status=${encodeURIComponent(statusFilter)}`;
+        }
+        
+        const response = await apiFetch(url, { method: 'GET' });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.error || '获取监控数据失败');
+        }
+
+        monitorState.executions = Array.isArray(result.executions) ? result.executions : [];
+        monitorState.stats = result.stats || {};
+        monitorState.lastFetchedAt = new Date();
+        
+        // 更新分页信息
+        if (result.total !== undefined) {
+            monitorState.pagination = {
+                page: result.page || currentPage,
+                pageSize: result.page_size || pageSize,
+                total: result.total || 0,
+                totalPages: result.total_pages || 1
+            };
+        }
+
+        renderMonitorStats(monitorState.stats, monitorState.lastFetchedAt);
+        renderMonitorExecutions(monitorState.executions, statusFilter);
+        renderMonitorPagination();
+    } catch (error) {
+        console.error('刷新监控面板失败:', error);
+        if (statsContainer) {
+            statsContainer.innerHTML = `<div class="monitor-error">无法加载统计信息：${escapeHtml(error.message)}</div>`;
+        }
+        if (execContainer) {
+            execContainer.innerHTML = `<div class="monitor-error">无法加载执行记录：${escapeHtml(error.message)}</div>`;
+        }
+    }
 }
 
 function renderMonitorStats(statsMap = {}, lastFetchedAt = null) {
@@ -1091,21 +1150,18 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
     }
 
     if (!Array.isArray(executions) || executions.length === 0) {
-        container.innerHTML = '<div class="monitor-empty">暂无执行记录</div>';
+        // 根据是否有筛选条件显示不同的提示
+        if (statusFilter && statusFilter !== 'all') {
+            container.innerHTML = '<div class="monitor-empty">当前筛选条件下暂无记录</div>';
+        } else {
+            container.innerHTML = '<div class="monitor-empty">暂无执行记录</div>';
+        }
         return;
     }
 
-    const normalizedStatus = statusFilter === 'all' ? null : statusFilter;
-    const filtered = normalizedStatus
-        ? executions.filter(exec => (exec.status || '').toLowerCase() === normalizedStatus)
-        : executions;
-
-    if (filtered.length === 0) {
-        container.innerHTML = '<div class="monitor-empty">当前筛选条件下暂无记录</div>';
-        return;
-    }
-
-    const rows = filtered
+    // 由于筛选已经在后端完成，这里直接使用所有传入的执行记录
+    // 不再需要前端再次筛选，因为后端已经返回了筛选后的数据
+    const rows = executions
         .map(exec => {
             const status = (exec.status || 'unknown').toLowerCase();
             const statusClass = `monitor-status-chip ${status}`;
