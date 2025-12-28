@@ -346,7 +346,7 @@ func (m *Manager) GetItemsCount(category string) (int, error) {
 	return count, nil
 }
 
-// SearchItemsByKeyword 按关键字搜索知识项（在所有数据中搜索，支持标题、分类、路径匹配）
+// SearchItemsByKeyword 按关键字搜索知识项（在所有数据中搜索，支持标题、分类、路径、内容匹配）
 func (m *Manager) SearchItemsByKeyword(keyword string, category string) ([]*KnowledgeItemSummary, error) {
 	if keyword == "" {
 		return nil, fmt.Errorf("搜索关键字不能为空")
@@ -363,9 +363,9 @@ func (m *Manager) SearchItemsByKeyword(keyword string, category string) ([]*Know
 	query = `
 		SELECT id, category, title, file_path, created_at, updated_at 
 		FROM knowledge_base_items 
-		WHERE (LOWER(title) LIKE LOWER(?) OR LOWER(category) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))
+		WHERE (LOWER(title) LIKE LOWER(?) OR LOWER(category) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?) OR LOWER(content) LIKE LOWER(?))
 	`
-	args = append(args, searchPattern, searchPattern, searchPattern)
+	args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
 
 	// 如果指定了分类，添加分类过滤
 	if category != "" {
