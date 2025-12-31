@@ -18,6 +18,8 @@ CyberStrikeAI 是一款 **AI 原生安全测试平台**，基于 Go 构建，集
 - 外部 MCP 服务器 & 攻击链视图  
   <img src="./img/外部MCP接入.png" alt="Preview" width="560">   
   <img src="./img/攻击链.png" alt="Preview" width="560">
+- 漏洞管理  
+  <img src="./img/漏洞管理.png" alt="Preview" width="560">
 
 ## 特性速览
 
