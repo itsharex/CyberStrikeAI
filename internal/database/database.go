@@ -433,7 +433,7 @@ func (db *DB) migrateConversationGroupMappingsTable() error {
 	return nil
 }
 
-// migrateBatchTaskQueuesTable 迁移batch_task_queues表，添加title字段
+// migrateBatchTaskQueuesTable 迁移batch_task_queues表，添加title和role字段
 func (db *DB) migrateBatchTaskQueuesTable() error {
 	// 检查title字段是否存在
 	var count int
@@ -451,6 +451,25 @@ func (db *DB) migrateBatchTaskQueuesTable() error {
 		// 字段不存在，添加它
 		if _, err := db.Exec("ALTER TABLE batch_task_queues ADD COLUMN title TEXT"); err != nil {
 			db.logger.Warn("添加title字段失败", zap.Error(err))
+		}
+	}
+
+	// 检查role字段是否存在
+	var roleCount int
+	err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('batch_task_queues') WHERE name='role'").Scan(&roleCount)
+	if err != nil {
+		// 如果查询失败，尝试添加字段
+		if _, addErr := db.Exec("ALTER TABLE batch_task_queues ADD COLUMN role TEXT"); addErr != nil {
+			// 如果字段已存在，忽略错误
+			errMsg := strings.ToLower(addErr.Error())
+			if !strings.Contains(errMsg, "duplicate column") && !strings.Contains(errMsg, "already exists") {
+				db.logger.Warn("添加role字段失败", zap.Error(addErr))
+			}
+		}
+	} else if roleCount == 0 {
+		// 字段不存在，添加它
+		if _, err := db.Exec("ALTER TABLE batch_task_queues ADD COLUMN role TEXT"); err != nil {
+			db.logger.Warn("添加role字段失败", zap.Error(err))
 		}
 	}
 

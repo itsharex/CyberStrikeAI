@@ -716,23 +716,56 @@ const batchQueuesState = {
     totalPages: 1
 };
 
-// 显示批量导入模态框
-function showBatchImportModal() {
+// 显示新建任务模态框
+async function showBatchImportModal() {
     const modal = document.getElementById('batch-import-modal');
     const input = document.getElementById('batch-tasks-input');
     const titleInput = document.getElementById('batch-queue-title');
+    const roleSelect = document.getElementById('batch-queue-role');
     if (modal && input) {
         input.value = '';
         if (titleInput) {
             titleInput.value = '';
         }
+        // 重置角色选择为默认
+        if (roleSelect) {
+            roleSelect.value = '';
+        }
         updateBatchImportStats('');
+        
+        // 加载并填充角色列表
+        if (roleSelect && typeof loadRoles === 'function') {
+            try {
+                const loadedRoles = await loadRoles();
+                // 清空现有选项（除了默认选项）
+                roleSelect.innerHTML = '<option value="">默认</option>';
+                
+                // 添加已启用的角色
+                const sortedRoles = loadedRoles.sort((a, b) => {
+                    if (a.name === '默认') return -1;
+                    if (b.name === '默认') return 1;
+                    return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+                });
+                
+                sortedRoles.forEach(role => {
+                    if (role.name !== '默认' && role.enabled !== false) {
+                        const option = document.createElement('option');
+                        option.value = role.name;
+                        option.textContent = role.name;
+                        roleSelect.appendChild(option);
+                    }
+                });
+            } catch (error) {
+                console.error('加载角色列表失败:', error);
+            }
+        }
+        
         modal.style.display = 'block';
         input.focus();
     }
 }
 
-// 关闭批量导入模态框
+// 关闭新建任务模态框
 function closeBatchImportModal() {
     const modal = document.getElementById('batch-import-modal');
     if (modal) {
@@ -740,7 +773,7 @@ function closeBatchImportModal() {
     }
 }
 
-// 更新批量导入统计
+// 更新新建任务统计
 function updateBatchImportStats(text) {
     const statsEl = document.getElementById('batch-import-stats');
     if (!statsEl) return;
@@ -770,6 +803,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function createBatchQueue() {
     const input = document.getElementById('batch-tasks-input');
     const titleInput = document.getElementById('batch-queue-title');
+    const roleSelect = document.getElementById('batch-queue-role');
     if (!input) return;
     
     const text = input.value.trim();
@@ -788,13 +822,16 @@ async function createBatchQueue() {
     // 获取标题（可选）
     const title = titleInput ? titleInput.value.trim() : '';
     
+    // 获取角色（可选，空字符串表示默认角色）
+    const role = roleSelect ? roleSelect.value || '' : '';
+    
     try {
         const response = await apiFetch('/api/batch-tasks', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ title, tasks }),
+            body: JSON.stringify({ title, tasks, role }),
         });
         
         if (!response.ok) {
@@ -816,6 +853,34 @@ async function createBatchQueue() {
     }
 }
 
+// 获取角色图标（辅助函数）
+function getRoleIconForDisplay(roleName, rolesList) {
+    if (!roleName || roleName === '') {
+        return '🔵'; // 默认角色图标
+    }
+    
+    if (Array.isArray(rolesList) && rolesList.length > 0) {
+        const role = rolesList.find(r => r.name === roleName);
+        if (role && role.icon) {
+            let icon = role.icon;
+            // 检查是否是 Unicode 转义格式（可能包含引号）
+            const unicodeMatch = icon.match(/^"?\\U([0-9A-F]{8})"?$/i);
+            if (unicodeMatch) {
+                try {
+                    const codePoint = parseInt(unicodeMatch[1], 16);
+                    icon = String.fromCodePoint(codePoint);
+                } catch (e) {
+                    // 转换失败，使用默认图标
+                    console.warn('转换 icon Unicode 转义失败:', icon, e);
+                    return '👤';
+                }
+            }
+            return icon;
+        }
+    }
+    return '👤'; // 默认图标
+}
+
 // 加载批量任务队列列表
 async function loadBatchQueues(page) {
     const section = document.getElementById('batch-queues-section');
@@ -825,6 +890,17 @@ async function loadBatchQueues(page) {
     if (page !== undefined) {
         batchQueuesState.currentPage = page;
     }
+    
+    // 加载角色列表（用于显示正确的角色图标）
+    let loadedRoles = [];
+    if (typeof loadRoles === 'function') {
+        try {
+            loadedRoles = await loadRoles();
+        } catch (error) {
+            console.warn('加载角色列表失败，将使用默认图标:', error);
+        }
+    }
+    batchQueuesState.loadedRoles = loadedRoles; // 保存到状态中供渲染使用
     
     // 构建查询参数
     const params = new URLSearchParams();
@@ -933,11 +1009,18 @@ function renderBatchQueues() {
         
         const titleDisplay = queue.title ? `<span class="batch-queue-title" style="font-weight: 600; color: var(--text-primary); margin-right: 8px;">${escapeHtml(queue.title)}</span>` : '';
         
+        // 显示角色信息（使用正确的角色图标）
+        const loadedRoles = batchQueuesState.loadedRoles || [];
+        const roleIcon = getRoleIconForDisplay(queue.role, loadedRoles);
+        const roleName = queue.role && queue.role !== '' ? queue.role : '默认';
+        const roleDisplay = `<span class="batch-queue-role" style="margin-right: 8px;" title="角色: ${escapeHtml(roleName)}">${roleIcon} ${escapeHtml(roleName)}</span>`;
+        
         return `
             <div class="batch-queue-item" data-queue-id="${queue.id}" onclick="showBatchQueueDetail('${queue.id}')">
                 <div class="batch-queue-header">
                     <div class="batch-queue-info" style="flex: 1;">
                         ${titleDisplay}
+                        ${roleDisplay}
                         <span class="batch-queue-status ${status.class}">${status.text}</span>
                         <span class="batch-queue-id">队列ID: ${escapeHtml(queue.id)}</span>
                         <span class="batch-queue-time">创建时间: ${new Date(queue.createdAt).toLocaleString('zh-CN')}</span>
@@ -1110,6 +1193,16 @@ async function showBatchQueueDetail(queueId) {
         if (!modal || !content) return;
         
         try {
+        // 加载角色列表（如果还未加载）
+        let loadedRoles = [];
+        if (typeof loadRoles === 'function') {
+            try {
+                loadedRoles = await loadRoles();
+            } catch (error) {
+                console.warn('加载角色列表失败，将使用默认图标:', error);
+            }
+        }
+        
         const response = await apiFetch(`/api/batch-tasks/${queueId}`);
         if (!response.ok) {
             throw new Error('获取队列详情失败');
@@ -1164,12 +1257,48 @@ async function showBatchQueueDetail(queueId) {
             'cancelled': { text: '已取消', class: 'batch-task-status-cancelled' }
         };
         
+        // 获取角色信息（如果队列有角色配置）
+        let roleDisplay = '';
+        if (queue.role && queue.role !== '') {
+            // 如果有角色配置，尝试获取角色详细信息
+            let roleName = queue.role;
+            let roleIcon = '👤';
+            // 从已加载的角色列表中查找角色图标
+            if (Array.isArray(loadedRoles) && loadedRoles.length > 0) {
+                const role = loadedRoles.find(r => r.name === roleName);
+                if (role && role.icon) {
+                    let icon = role.icon;
+                    const unicodeMatch = icon.match(/^"?\\U([0-9A-F]{8})"?$/i);
+                    if (unicodeMatch) {
+                        try {
+                            const codePoint = parseInt(unicodeMatch[1], 16);
+                            icon = String.fromCodePoint(codePoint);
+                        } catch (e) {
+                            // 转换失败，使用默认图标
+                        }
+                    }
+                    roleIcon = icon;
+                }
+            }
+            roleDisplay = `<div class="detail-item">
+                <span class="detail-label">角色</span>
+                <span class="detail-value">${roleIcon} ${escapeHtml(roleName)}</span>
+            </div>`;
+        } else {
+            // 默认角色
+            roleDisplay = `<div class="detail-item">
+                <span class="detail-label">角色</span>
+                <span class="detail-value">🔵 默认</span>
+            </div>`;
+        }
+        
         content.innerHTML = `
             <div class="batch-queue-detail-info">
                 ${queue.title ? `<div class="detail-item">
                     <span class="detail-label">任务标题</span>
                     <span class="detail-value">${escapeHtml(queue.title)}</span>
                 </div>` : ''}
+                ${roleDisplay}
                 <div class="detail-item">
                     <span class="detail-label">队列ID</span>
                     <span class="detail-value"><code>${escapeHtml(queue.id)}</code></span>

@@ -29,6 +29,7 @@ type BatchTask struct {
 type BatchTaskQueue struct {
 	ID           string       `json:"id"`
 	Title        string       `json:"title,omitempty"`
+	Role         string       `json:"role,omitempty"` // 角色名称（空字符串表示默认角色）
 	Tasks        []*BatchTask `json:"tasks"`
 	Status       string       `json:"status"` // pending, running, paused, completed, cancelled
 	CreatedAt    time.Time    `json:"createdAt"`
@@ -62,7 +63,7 @@ func (m *BatchTaskManager) SetDB(db *database.DB) {
 }
 
 // CreateBatchQueue 创建批量任务队列
-func (m *BatchTaskManager) CreateBatchQueue(title string, tasks []string) *BatchTaskQueue {
+func (m *BatchTaskManager) CreateBatchQueue(title, role string, tasks []string) *BatchTaskQueue {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -70,6 +71,7 @@ func (m *BatchTaskManager) CreateBatchQueue(title string, tasks []string) *Batch
 	queue := &BatchTaskQueue{
 		ID:           queueID,
 		Title:        title,
+		Role:         role,
 		Tasks:        make([]*BatchTask, 0, len(tasks)),
 		Status:       "pending",
 		CreatedAt:    time.Now(),
@@ -98,7 +100,7 @@ func (m *BatchTaskManager) CreateBatchQueue(title string, tasks []string) *Batch
 
 	// 保存到数据库
 	if m.db != nil {
-		if err := m.db.CreateBatchQueue(queueID, title, dbTasks); err != nil {
+		if err := m.db.CreateBatchQueue(queueID, title, role, dbTasks); err != nil {
 			// 如果数据库保存失败，记录错误但继续（使用内存缓存）
 			// 这里可以添加日志记录
 		}
@@ -157,6 +159,9 @@ func (m *BatchTaskManager) loadQueueFromDB(queueID string) *BatchTaskQueue {
 
 	if queueRow.Title.Valid {
 		queue.Title = queueRow.Title.String
+	}
+	if queueRow.Role.Valid {
+		queue.Role = queueRow.Role.String
 	}
 	if queueRow.StartedAt.Valid {
 		queue.StartedAt = &queueRow.StartedAt.Time
@@ -350,6 +355,9 @@ func (m *BatchTaskManager) LoadFromDB() error {
 
 		if queueRow.Title.Valid {
 			queue.Title = queueRow.Title.String
+		}
+		if queueRow.Role.Valid {
+			queue.Role = queueRow.Role.String
 		}
 		if queueRow.StartedAt.Valid {
 			queue.StartedAt = &queueRow.StartedAt.Time

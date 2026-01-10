@@ -811,6 +811,7 @@ func (h *AgentHandler) ListCompletedTasks(c *gin.Context) {
 type BatchTaskRequest struct {
 	Title string   `json:"title"`                    // 任务标题（可选）
 	Tasks []string `json:"tasks" binding:"required"` // 任务列表，每行一个任务
+	Role  string   `json:"role,omitempty"`           // 角色名称（可选，空字符串表示默认角色）
 }
 
 // CreateBatchQueue 创建批量任务队列
@@ -839,7 +840,7 @@ func (h *AgentHandler) CreateBatchQueue(c *gin.Context) {
 		return
 	}
 
-	queue := h.batchTaskManager.CreateBatchQueue(req.Title, validTasks)
+	queue := h.batchTaskManager.CreateBatchQueue(req.Title, req.Role, validTasks)
 	c.JSON(http.StatusOK, gin.H{
 		"queueId": queue.ID,
 		"queue":   queue,
@@ -1095,7 +1096,27 @@ func (h *AgentHandler) executeBatchQueue(queueID string) {
 		// 保存conversationId到任务中（即使是运行中状态也要保存，以便查看对话）
 		h.batchTaskManager.UpdateTaskStatusWithConversationID(queueID, task.ID, "running", "", "", conversationID)
 
-		// 保存用户消息
+		// 应用角色用户提示词和工具配置
+		finalMessage := task.Message
+		var roleTools []string // 角色配置的工具列表
+		if queue.Role != "" && queue.Role != "默认" {
+			if h.config.Roles != nil {
+				if role, exists := h.config.Roles[queue.Role]; exists && role.Enabled {
+					// 应用用户提示词
+					if role.UserPrompt != "" {
+						finalMessage = role.UserPrompt + "\n\n" + task.Message
+						h.logger.Info("应用角色用户提示词", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("role", queue.Role))
+					}
+					// 获取角色配置的工具列表（优先使用tools字段，向后兼容mcps字段）
+					if len(role.Tools) > 0 {
+						roleTools = role.Tools
+						h.logger.Info("使用角色配置的工具列表", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("role", queue.Role), zap.Int("toolCount", len(roleTools)))
+					}
+				}
+			}
+		}
+
+		// 保存用户消息（保存原始消息，不包含角色提示词）
 		_, err = h.db.AddMessage(conversationID, "user", task.Message, nil)
 		if err != nil {
 			h.logger.Error("保存用户消息失败", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("conversationId", conversationID), zap.Error(err))
@@ -1116,14 +1137,14 @@ func (h *AgentHandler) executeBatchQueue(queueID string) {
 		}
 		progressCallback := h.createProgressCallback(conversationID, assistantMessageID, nil)
 
-		// 执行任务
-		h.logger.Info("执行批量任务", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("message", task.Message), zap.String("conversationId", conversationID))
+		// 执行任务（使用包含角色提示词的finalMessage和角色工具列表）
+		h.logger.Info("执行批量任务", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("message", task.Message), zap.String("role", queue.Role), zap.String("conversationId", conversationID))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		// 存储取消函数，以便在取消队列时能够取消当前任务
 		h.batchTaskManager.SetTaskCancel(queueID, cancel)
-		// 批量任务暂时不支持角色工具过滤，使用所有工具（传入nil）
-		result, err := h.agent.AgentLoopWithProgress(ctx, task.Message, []agent.ChatMessage{}, conversationID, progressCallback, nil)
+		// 使用队列配置的角色工具列表（如果为空，表示使用所有工具）
+		result, err := h.agent.AgentLoopWithProgress(ctx, finalMessage, []agent.ChatMessage{}, conversationID, progressCallback, roleTools)
 		// 任务执行完成，清理取消函数
 		h.batchTaskManager.SetTaskCancel(queueID, nil)
 		cancel()
