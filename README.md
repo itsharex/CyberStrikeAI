@@ -437,24 +437,17 @@ Compress the 5 MB nuclei report, summarize critical CVEs, and attach the artifac
 Build an attack chain for the latest engagement and export the node list with severity >= high.
 ```
 
-## Changelog (Recent)
+## Changelog
 
-- 2026-01-11 – Added role-based testing feature: predefined security testing roles with custom system prompts and tool restrictions. Users can select roles (Penetration Testing, CTF, Web App Scanning, etc.) from the chat interface to customize AI behavior and available tools. Roles are defined as YAML files in the `roles/` directory with support for hot-reload.
-- 2026-01-08 – Added SSE (Server-Sent Events) transport mode support for external MCP servers. External MCP federation now supports HTTP, stdio, and SSE modes. SSE mode enables real-time streaming communication for push-based scenarios.
-- 2026-01-01 – Added batch task management feature: create task queues with multiple tasks, add/edit/delete tasks before execution, and execute them sequentially. Each task runs as a separate conversation with status tracking (pending/running/completed/failed/cancelled). All queues and tasks are persisted in the database.
-- 2025-12-25 – Added vulnerability management feature: full CRUD operations for tracking vulnerabilities discovered during testing. Supports severity levels (critical/high/medium/low/info), status workflow (open/confirmed/fixed/false_positive), filtering by conversation/severity/status, and comprehensive statistics dashboard.
-- 2025-12-25 – Added conversation grouping feature: organize conversations into groups, pin groups to top, rename/delete groups via context menu. All group data is persisted in the database.
-- 2025-12-24 – Refactored attack chain generation logic, achieving 2x faster generation speed. Redesigned attack chain frontend visualization for improved user experience.
-- 2025-12-20 – Added knowledge base feature with vector search, hybrid retrieval, and automatic indexing. AI agent can now search security knowledge during conversations.
-- 2025-12-19 – Added ZoomEye network space search engine tool (zoomeye_search) with support for IPv4/IPv6/web assets, facets statistics, and flexible query parameters.
-- 2025-12-18 – Optimized web frontend with enhanced sidebar navigation and improved user experience.
-- 2025-12-07 – Added FOFA network space search engine tool (fofa_search) with flexible query parameters and field configuration.
-- 2025-12-07 – Fixed positional parameter handling bug: ensure correct parameter position when using default values.
-- 2025-11-20 – Added automatic compression/summarization for oversized tool logs and MCP transcripts.
-- 2025-11-17 – Introduced AI-built attack-chain visualization with interactive graph and risk scoring.
-- 2025-11-15 – Delivered large-result pagination, advanced filtering, and external MCP federation.
-- 2025-11-14 – Optimized tool lookups (O(1)), execution record cleanup, and DB pagination.
-- 2025-11-13 – Added web authentication, settings UI, and MCP stdio mode integration.
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history and all changes.
+
+### Recent Highlights
+
+- **2026-01-11** – Role-based testing with predefined security testing roles
+- **2026-01-08** – SSE transport mode support for external MCP servers
+- **2026-01-01** – Batch task management with queue-based execution
+- **2025-12-25** – Vulnerability management and conversation grouping features
+- **2025-12-20** – Knowledge base with vector search and hybrid retrieval
 
 ## Star History
 
