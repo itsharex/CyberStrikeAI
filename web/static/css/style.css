@@ -1063,7 +1063,7 @@ header {
 }
 
 .message.system .message-content {
-    max-width: 90%;
+    max-width: 75%;
     align-items: stretch;
     margin: 0;
 }
