@@ -1948,38 +1948,13 @@ function setAttackChainLoading(conversationId, loading) {
     }
 }
 
-// 添加攻击链按钮
+// 添加攻击链按钮（已移至菜单，此函数保留以保持兼容性，但不再显示顶部按钮）
 function addAttackChainButton(conversationId) {
-    const attackChainBtn = document.getElementById('attack-chain-btn');
+    // 攻击链按钮已移至三点菜单，不再需要显示顶部按钮
+    // 此函数保留以保持代码兼容性，但不再执行任何操作
     const conversationHeader = document.getElementById('conversation-header');
-    
-    if (!attackChainBtn || !conversationHeader) {
-        return;
-    }
-
-    if (conversationId) {
-        // 显示会话顶部栏
-        conversationHeader.style.display = 'block';
-        
-        const isRunning = typeof isConversationTaskRunning === 'function'
-            ? isConversationTaskRunning(conversationId)
-            : false;
-        if (isRunning) {
-            attackChainBtn.disabled = true;
-            attackChainBtn.title = '当前对话正在执行，请稍后再生成攻击链';
-            attackChainBtn.onclick = null;
-        } else {
-            attackChainBtn.disabled = false;
-            attackChainBtn.title = '查看当前对话的攻击链';
-            attackChainBtn.onclick = () => showAttackChain(conversationId);
-        }
-    } else {
-        // 隐藏会话顶部栏
+    if (conversationHeader) {
         conversationHeader.style.display = 'none';
-        
-        attackChainBtn.disabled = true;
-        attackChainBtn.title = '请选择一个对话以查看攻击链';
-        attackChainBtn.onclick = null;
     }
 }
 
@@ -4323,6 +4298,33 @@ async function showConversationContextMenu(event) {
     submenuLoading = false;
 
     const convId = contextMenuConversationId;
+    
+    // 更新攻击链菜单项的启用状态
+    const attackChainMenuItem = document.getElementById('attack-chain-menu-item');
+    if (attackChainMenuItem) {
+        if (convId) {
+            const isRunning = typeof isConversationTaskRunning === 'function'
+                ? isConversationTaskRunning(convId)
+                : false;
+            if (isRunning) {
+                attackChainMenuItem.style.opacity = '0.5';
+                attackChainMenuItem.style.cursor = 'not-allowed';
+                attackChainMenuItem.onclick = null;
+                attackChainMenuItem.title = '当前对话正在执行，请稍后再生成攻击链';
+            } else {
+                attackChainMenuItem.style.opacity = '1';
+                attackChainMenuItem.style.cursor = 'pointer';
+                attackChainMenuItem.onclick = showAttackChainFromContext;
+                attackChainMenuItem.title = '查看当前对话的攻击链';
+            }
+        } else {
+            attackChainMenuItem.style.opacity = '0.5';
+            attackChainMenuItem.style.cursor = 'not-allowed';
+            attackChainMenuItem.onclick = null;
+            attackChainMenuItem.title = '请选择一个对话以查看攻击链';
+        }
+    }
+    
     // 先获取对话的置顶状态并更新菜单文本（在显示菜单之前）
     if (convId) {
         try {
@@ -5043,6 +5045,15 @@ async function loadConversationGroupMapping() {
     } catch (error) {
         console.error('加载对话分组映射失败:', error);
     }
+}
+
+// 从上下文菜单查看攻击链
+function showAttackChainFromContext() {
+    const convId = contextMenuConversationId;
+    if (!convId) return;
+    
+    closeContextMenu();
+    showAttackChain(convId);
 }
 
 // 从上下文菜单删除对话

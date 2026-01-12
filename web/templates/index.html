@@ -1171,6 +1171,13 @@
 
     <!-- 上下文菜单 -->
     <div id="conversation-context-menu" class="context-menu" style="display: none;">
+        <div id="attack-chain-menu-item" class="context-menu-item" onclick="showAttackChainFromContext()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10.5 13.5l3-3M8 8H5a4 4 0 1 0 0 8h3m8-8h3a4 4 0 0 1 0 8h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>查看攻击链</span>
+        </div>
+        <div class="context-menu-divider"></div>
         <div class="context-menu-item" onclick="renameConversation()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
