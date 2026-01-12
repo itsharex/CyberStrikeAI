@@ -671,11 +671,13 @@ function updateRoleToolsStats() {
     if (roleUsesAllTools) {
         // 使用从API响应中获取的已启用工具总数
         const totalEnabled = totalEnabledToolsInMCP || 0;
-        // 当前页分母应该是当前页已启用的工具数，而不是所有工具数
-        const currentPageDenominator = currentPageEnabledInMCP > 0 ? currentPageEnabledInMCP : document.querySelectorAll('#role-tools-list input[type="checkbox"]').length;
+        // 当前页分母应该是当前页的总工具数（每页20个），而不是当前页已启用的工具数
+        const currentPageTotal = document.querySelectorAll('#role-tools-list input[type="checkbox"]').length;
+        // 总工具数（所有工具，包括已启用和未启用的）
+        const totalTools = roleToolsPagination.total || 0;
         statsEl.innerHTML = `
-            <span title="当前页选中的工具数">✅ 当前页已选中: <strong>${currentPageEnabled}</strong> / ${currentPageDenominator}</span>
-            <span title="所有已启用工具中选中的工具总数（基于MCP管理）">📊 总计已选中: <strong>${totalEnabled}</strong> / ${totalEnabled} <em>(使用所有已启用工具)</em></span>
+            <span title="当前页选中的工具数">✅ 当前页已选中: <strong>${currentPageEnabled}</strong> / ${currentPageTotal}</span>
+            <span title="所有已启用工具中选中的工具总数（基于MCP管理）">📊 总计已选中: <strong>${totalEnabled}</strong> / ${totalTools} <em>(使用所有已启用工具)</em></span>
         `;
         return;
     }
@@ -720,12 +722,14 @@ function updateRoleToolsStats() {
         });
     }
     
-    // 当前页分母应该是当前页已启用的工具数，而不是所有工具数
-    const currentPageDenominator = currentPageEnabledInMCP > 0 ? currentPageEnabledInMCP : document.querySelectorAll('#role-tools-list input[type="checkbox"]').length;
+    // 当前页分母应该是当前页的总工具数（每页20个），而不是当前页已启用的工具数
+    const currentPageTotal = document.querySelectorAll('#role-tools-list input[type="checkbox"]').length;
+    // 总工具数（所有工具，包括已启用和未启用的）
+    const totalTools = roleToolsPagination.total || 0;
     
     statsEl.innerHTML = `
-        <span title="当前页选中的工具数（只统计已启用的工具）">✅ 当前页已选中: <strong>${currentPageEnabled}</strong> / ${currentPageDenominator}</span>
-        <span title="角色已关联的工具总数（基于角色实际配置）">📊 总计已选中: <strong>${totalSelected}</strong> / ${totalEnabledForRole}</span>
+        <span title="当前页选中的工具数（只统计已启用的工具）">✅ 当前页已选中: <strong>${currentPageEnabled}</strong> / ${currentPageTotal}</span>
+        <span title="角色已关联的工具总数（基于角色实际配置）">📊 总计已选中: <strong>${totalSelected}</strong> / ${totalTools}</span>
     `;
 }
 
@@ -1142,7 +1146,7 @@ async function saveRole() {
         saveCurrentRolePageToolStates();
         
         // 收集所有选中的工具（包括未在MCP管理中启用的）
-        const allSelectedTools = getAllSelectedRoleTools();
+        let allSelectedTools = getAllSelectedRoleTools();
         
         // 如果是首次添加角色且没有选择工具，默认使用全部工具
         if (isFirstUserRole && allSelectedTools.length === 0) {
@@ -1176,24 +1180,48 @@ async function saveRole() {
                 });
                 
                 roleUsesAllTools = false;
+            } else {
+                // 即使使用所有工具，也需要加载所有工具到状态映射中，以便检查是否有未启用的工具被选中
+                // 这样可以检测用户是否手动选择了一些未启用的工具
+                await loadAllToolsToStateMap();
+                
+                // 检查是否有未启用的工具被手动选中（enabled为true但mcpEnabled为false）
+                let hasDisabledToolsSelected = false;
+                roleToolStateMap.forEach((state) => {
+                    if (state.enabled && state.mcpEnabled === false) {
+                        hasDisabledToolsSelected = true;
+                    }
+                });
+                
+                // 如果没有未启用的工具被选中，将所有已启用的工具标记为选中（这是使用所有工具的默认行为）
+                if (!hasDisabledToolsSelected) {
+                    roleToolStateMap.forEach((state) => {
+                        if (state.mcpEnabled !== false) {
+                            state.enabled = true;
+                        }
+                    });
+                }
+                
+                // 更新 allSelectedTools，因为现在状态映射中包含了所有工具
+                allSelectedTools = getAllSelectedRoleTools();
+            }
+        }
+        
+        // 检查哪些工具未在MCP管理中启用（无论是否使用所有工具都要检查）
+        disabledTools = getDisabledTools(allSelectedTools);
+        
+        // 如果有未启用的工具，提示用户
+        if (disabledTools.length > 0) {
+            const toolNames = disabledTools.map(t => t.name).join('、');
+            const message = `以下 ${disabledTools.length} 个工具未在MCP管理中启用，无法在角色中配置：\n\n${toolNames}\n\n请先在"MCP管理"中启用这些工具，然后再在角色中配置。\n\n是否继续保存？（将只保存已启用的工具）`;
+            
+            if (!confirm(message)) {
+                return; // 用户取消保存
             }
         }
         
         // 如果使用所有工具，不需要获取工具列表
         if (!roleUsesAllTools) {
-            // 检查哪些工具未在MCP管理中启用
-            disabledTools = getDisabledTools(allSelectedTools);
-            
-            // 如果有未启用的工具，提示用户
-            if (disabledTools.length > 0) {
-                const toolNames = disabledTools.map(t => t.name).join('、');
-                const message = `以下 ${disabledTools.length} 个工具未在MCP管理中启用，无法在角色中配置：\n\n${toolNames}\n\n请先在"MCP管理"中启用这些工具，然后再在角色中配置。\n\n是否继续保存？（将只保存已启用的工具）`;
-                
-                if (!confirm(message)) {
-                    return; // 用户取消保存
-                }
-            }
-            
             // 获取选中的工具列表（只包含在MCP管理中已启用的工具）
             tools = await getSelectedRoleTools();
         }
@@ -1232,7 +1260,7 @@ async function saveRole() {
                 toolNames = toolNames.substring(0, 100) + '...';
             }
             showNotification(
-                `${isEdit ? '角色已更新' : '角色已创建'}，但已过滤 ${disabledTools.length} 个未在MCP管理中启用的工具。请先在"MCP管理"中启用这些工具，然后再在角色中配置。`,
+                `${isEdit ? '角色已更新' : '角色已创建'}，但已过滤 ${disabledTools.length} 个未在MCP管理中启用的工具：${toolNames}。请先在"MCP管理"中启用这些工具，然后再在角色中配置。`,
                 'warning'
             );
         } else {
