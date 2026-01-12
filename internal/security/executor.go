@@ -3,6 +3,7 @@ package security
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -615,6 +616,13 @@ func (e *Executor) formatParamValue(param config.ParameterConfig, value interfac
 			}
 			return strings.Join(strs, ",")
 		}
+		return fmt.Sprintf("%v", value)
+	case "object":
+		// 对象/字典：序列化为 JSON 字符串
+		if jsonBytes, err := json.Marshal(value); err == nil {
+			return string(jsonBytes)
+		}
+		// 如果 JSON 序列化失败，回退到默认格式化
 		return fmt.Sprintf("%v", value)
 	default:
 		formattedValue := fmt.Sprintf("%v", value)
