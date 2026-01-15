@@ -303,16 +303,17 @@ type ProgressCallback func(eventType, message string, data interface{})
 
 // AgentLoop 执行Agent循环
 func (a *Agent) AgentLoop(ctx context.Context, userInput string, historyMessages []ChatMessage) (*AgentLoopResult, error) {
-	return a.AgentLoopWithProgress(ctx, userInput, historyMessages, "", nil, nil)
+	return a.AgentLoopWithProgress(ctx, userInput, historyMessages, "", nil, nil, nil)
 }
 
 // AgentLoopWithConversationID 执行Agent循环（带对话ID）
 func (a *Agent) AgentLoopWithConversationID(ctx context.Context, userInput string, historyMessages []ChatMessage, conversationID string) (*AgentLoopResult, error) {
-	return a.AgentLoopWithProgress(ctx, userInput, historyMessages, conversationID, nil, nil)
+	return a.AgentLoopWithProgress(ctx, userInput, historyMessages, conversationID, nil, nil, nil)
 }
 
 // AgentLoopWithProgress 执行Agent循环（带进度回调和对话ID）
-func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, historyMessages []ChatMessage, conversationID string, callback ProgressCallback, roleTools []string) (*AgentLoopResult, error) {
+// roleSkills: 角色配置的skills列表（用于在系统提示词中提示AI，但不硬编码内容）
+func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, historyMessages []ChatMessage, conversationID string, callback ProgressCallback, roleTools []string, roleSkills []string) (*AgentLoopResult, error) {
 	// 设置当前对话ID
 	a.mu.Lock()
 	a.currentConversationID = conversationID
@@ -411,7 +412,45 @@ func (a *Agent) AgentLoopWithProgress(ctx context.Context, userInput string, his
   * low（低）：影响较小，难以利用或影响范围有限
   * info（信息）：安全配置问题、信息泄露但不直接可利用等
 - 确保漏洞证明（proof）包含足够的证据，如请求/响应、截图、命令输出等
-- 在记录漏洞后，继续测试以发现更多问题`
+- 在记录漏洞后，继续测试以发现更多问题
+
+技能库（Skills）：
+- 系统提供了技能库（Skills），包含各种安全测试的专业技能和方法论文档
+- 技能库与知识库的区别：
+  * 知识库（Knowledge Base）：用于检索分散的知识片段，适合快速查找特定信息
+  * 技能库（Skills）：包含完整的专业技能文档，适合深入学习某个领域的测试方法、工具使用、绕过技巧等
+- 当你需要特定领域的专业技能时，可以使用以下工具按需获取：
+  * ` + builtin.ToolListSkills + `: 获取所有可用的skills列表，查看有哪些专业技能可用
+  * ` + builtin.ToolReadSkill + `: 读取指定skill的详细内容，获取该领域的专业技能文档
+- 建议在执行相关任务前，先使用 ` + builtin.ToolListSkills + ` 查看可用skills，然后根据任务需要调用 ` + builtin.ToolReadSkill + ` 获取相关专业技能
+- 例如：如果需要测试SQL注入，可以先调用 ` + builtin.ToolListSkills + ` 查看是否有sql-injection相关的skill，然后调用 ` + builtin.ToolReadSkill + ` 读取该skill的内容
+- Skills内容包含完整的测试方法、工具使用、绕过技巧、最佳实践等专业技能文档，可以帮助你更专业地执行任务`
+
+	// 如果角色配置了skills，在系统提示词中提示AI（但不硬编码内容）
+	if len(roleSkills) > 0 {
+		var skillsHint strings.Builder
+		skillsHint.WriteString("\n\n本角色推荐使用的Skills：\n")
+		for i, skillName := range roleSkills {
+			if i > 0 {
+				skillsHint.WriteString("、")
+			}
+			skillsHint.WriteString("`")
+			skillsHint.WriteString(skillName)
+			skillsHint.WriteString("`")
+		}
+		skillsHint.WriteString("\n- 这些skills包含了与本角色相关的专业技能文档，建议在执行相关任务时使用 `")
+		skillsHint.WriteString(builtin.ToolReadSkill)
+		skillsHint.WriteString("` 工具读取这些skills的内容")
+		skillsHint.WriteString("\n- 例如：`")
+		skillsHint.WriteString(builtin.ToolReadSkill)
+		skillsHint.WriteString("(skill_name=\"")
+		skillsHint.WriteString(roleSkills[0])
+		skillsHint.WriteString("\")` 可以读取第一个推荐skill的内容")
+		skillsHint.WriteString("\n- 注意：这些skills的内容不会自动注入，需要你根据任务需要主动调用 `")
+		skillsHint.WriteString(builtin.ToolReadSkill)
+		skillsHint.WriteString("` 工具获取")
+		systemPrompt += skillsHint.String()
+	}
 
 	messages := []ChatMessage{
 		{

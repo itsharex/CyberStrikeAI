@@ -14,6 +14,11 @@ let roleUsesAllTools = false; // 标记角色是否使用所有工具（当没�
 let totalEnabledToolsInMCP = 0; // 已启用的工具总数（从MCP管理中获取，从API响应中获取）
 let roleConfiguredTools = new Set(); // 角色配置的工具列表（用于确定哪些工具应该被选中）
 
+// Skills相关
+let allRoleSkills = []; // 存储所有skills列表
+let roleSkillsSearchKeyword = ''; // Skills搜索关键词
+let roleSelectedSkills = new Set(); // 选中的skills集合
+
 // 对角色列表进行排序：默认角色排在第一个，其他按名称排序
 function sortRoles(rolesArray) {
     const sortedRoles = [...rolesArray];
@@ -834,6 +839,18 @@ async function showAddRoleModal() {
         toolsList.innerHTML = '';
     }
 
+    // 重置skills状态
+    roleSelectedSkills.clear();
+    roleSkillsSearchKeyword = '';
+    const skillsSearchInput = document.getElementById('role-skills-search');
+    if (skillsSearchInput) {
+        skillsSearchInput.value = '';
+    }
+    const skillsClearBtn = document.getElementById('role-skills-search-clear');
+    if (skillsClearBtn) {
+        skillsClearBtn.style.display = 'none';
+    }
+
     // 加载并渲染工具列表
     await loadRoleTools(1, '');
     
@@ -844,6 +861,9 @@ async function showAddRoleModal() {
     
     // 确保统计信息正确更新（显示0/108）
     updateRoleToolsStats();
+
+    // 加载并渲染skills列表
+    await loadRoleSkills();
 
     modal.style.display = 'flex';
 }
@@ -1003,6 +1023,16 @@ async function editRole(roleName) {
             setSelectedRoleTools(selectedTools);
         }
     }
+
+    // 加载并设置skills
+    await loadRoleSkills();
+    // 设置角色配置的skills
+    const selectedSkills = role.skills || [];
+    roleSelectedSkills.clear();
+    selectedSkills.forEach(skill => {
+        roleSelectedSkills.add(skill);
+    });
+    renderRoleSkills();
 
     modal.style.display = 'flex';
 }
@@ -1227,12 +1257,16 @@ async function saveRole() {
         }
     }
 
+    // 获取选中的skills
+    const skills = Array.from(roleSelectedSkills);
+
     const roleData = {
         name: name,
         description: description,
         icon: icon || undefined, // 如果为空字符串，则不发送该字段
         user_prompt: userPrompt,
         tools: tools, // 默认角色为空数组，表示使用所有工具
+        skills: skills, // Skills列表
         enabled: enabled
     };
     const url = isEdit ? `/api/roles/${encodeURIComponent(name)}` : '/api/roles';
@@ -1372,3 +1406,156 @@ if (typeof window !== 'undefined') {
     };
 }
 
+// ==================== Skills相关函数 ====================
+
+// 加载skills列表
+async function loadRoleSkills() {
+    try {
+        const response = await apiFetch('/api/roles/skills/list');
+        if (!response.ok) {
+            throw new Error('加载skills列表失败');
+        }
+        const data = await response.json();
+        allRoleSkills = data.skills || [];
+        renderRoleSkills();
+    } catch (error) {
+        console.error('加载skills列表失败:', error);
+        allRoleSkills = [];
+        const skillsList = document.getElementById('role-skills-list');
+        if (skillsList) {
+            skillsList.innerHTML = '<div class="skills-error">加载skills列表失败: ' + error.message + '</div>';
+        }
+    }
+}
+
+// 渲染skills列表
+function renderRoleSkills() {
+    const skillsList = document.getElementById('role-skills-list');
+    if (!skillsList) return;
+
+    // 过滤skills
+    let filteredSkills = allRoleSkills;
+    if (roleSkillsSearchKeyword) {
+        const keyword = roleSkillsSearchKeyword.toLowerCase();
+        filteredSkills = allRoleSkills.filter(skill => 
+            skill.toLowerCase().includes(keyword)
+        );
+    }
+
+    if (filteredSkills.length === 0) {
+        skillsList.innerHTML = '<div class="skills-empty">' + 
+            (roleSkillsSearchKeyword ? '没有找到匹配的skills' : '暂无可用skills') + 
+            '</div>';
+        updateRoleSkillsStats();
+        return;
+    }
+
+    // 渲染skills列表
+    skillsList.innerHTML = filteredSkills.map(skill => {
+        const isSelected = roleSelectedSkills.has(skill);
+        return `
+            <div class="role-skill-item" data-skill="${skill}">
+                <label class="checkbox-label">
+                    <input type="checkbox" class="modern-checkbox" 
+                           ${isSelected ? 'checked' : ''} 
+                           onchange="toggleRoleSkill('${skill}', this.checked)" />
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-text">${escapeHtml(skill)}</span>
+                </label>
+            </div>
+        `;
+    }).join('');
+
+    updateRoleSkillsStats();
+}
+
+// 切换skill选中状态
+function toggleRoleSkill(skill, checked) {
+    if (checked) {
+        roleSelectedSkills.add(skill);
+    } else {
+        roleSelectedSkills.delete(skill);
+    }
+    updateRoleSkillsStats();
+}
+
+// 全选skills
+function selectAllRoleSkills() {
+    let filteredSkills = allRoleSkills;
+    if (roleSkillsSearchKeyword) {
+        const keyword = roleSkillsSearchKeyword.toLowerCase();
+        filteredSkills = allRoleSkills.filter(skill => 
+            skill.toLowerCase().includes(keyword)
+        );
+    }
+    filteredSkills.forEach(skill => {
+        roleSelectedSkills.add(skill);
+    });
+    renderRoleSkills();
+}
+
+// 全不选skills
+function deselectAllRoleSkills() {
+    let filteredSkills = allRoleSkills;
+    if (roleSkillsSearchKeyword) {
+        const keyword = roleSkillsSearchKeyword.toLowerCase();
+        filteredSkills = allRoleSkills.filter(skill => 
+            skill.toLowerCase().includes(keyword)
+        );
+    }
+    filteredSkills.forEach(skill => {
+        roleSelectedSkills.delete(skill);
+    });
+    renderRoleSkills();
+}
+
+// 搜索skills
+function searchRoleSkills(keyword) {
+    roleSkillsSearchKeyword = keyword;
+    const clearBtn = document.getElementById('role-skills-search-clear');
+    if (clearBtn) {
+        clearBtn.style.display = keyword ? 'block' : 'none';
+    }
+    renderRoleSkills();
+}
+
+// 清除skills搜索
+function clearRoleSkillsSearch() {
+    const searchInput = document.getElementById('role-skills-search');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    roleSkillsSearchKeyword = '';
+    const clearBtn = document.getElementById('role-skills-search-clear');
+    if (clearBtn) {
+        clearBtn.style.display = 'none';
+    }
+    renderRoleSkills();
+}
+
+// 更新skills统计信息
+function updateRoleSkillsStats() {
+    const statsEl = document.getElementById('role-skills-stats');
+    if (!statsEl) return;
+
+    let filteredSkills = allRoleSkills;
+    if (roleSkillsSearchKeyword) {
+        const keyword = roleSkillsSearchKeyword.toLowerCase();
+        filteredSkills = allRoleSkills.filter(skill => 
+            skill.toLowerCase().includes(keyword)
+        );
+    }
+
+    const selectedCount = Array.from(roleSelectedSkills).filter(skill => 
+        filteredSkills.includes(skill)
+    ).length;
+
+    statsEl.textContent = `已选择 ${selectedCount} / ${filteredSkills.length}`;
+}
+
+// HTML转义函数
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}

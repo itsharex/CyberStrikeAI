@@ -46,6 +46,7 @@ CyberStrikeAI is an **AI-native security testing platform** built in Go. It inte
 - 🛡️ Vulnerability management with CRUD operations, severity tracking, status workflow, and statistics
 - 📋 Batch task management: create task queues, add multiple tasks, and execute them sequentially
 - 🎭 Role-based testing: predefined security testing roles (Penetration Testing, CTF, Web App Scanning, etc.) with custom prompts and tool restrictions
+- 🎯 Skills system: 20+ predefined security testing skills (SQL injection, XSS, API security, etc.) that can be attached to roles or called on-demand by AI agents
 
 ## Tool Overview
 
@@ -145,7 +146,8 @@ go build -o cyberstrike-ai cmd/server/main.go
 - **Predefined roles** – System includes 12+ predefined security testing roles (Penetration Testing, CTF, Web App Scanning, API Security Testing, Binary Analysis, Cloud Security Audit, etc.) in the `roles/` directory.
 - **Custom prompts** – Each role can define a `user_prompt` that prepends to user messages, guiding the AI to adopt specialized testing methodologies and focus areas.
 - **Tool restrictions** – Roles can specify a `tools` list to limit available tools, ensuring focused testing workflows (e.g., CTF role restricts to CTF-specific utilities).
-- **Easy role creation** – Create custom roles by adding YAML files to the `roles/` directory. Each role defines `name`, `description`, `user_prompt`, `icon`, `tools`, and `enabled` fields.
+- **Skills integration** – Roles can attach security testing skills that are automatically injected into system prompts.
+- **Easy role creation** – Create custom roles by adding YAML files to the `roles/` directory. Each role defines `name`, `description`, `user_prompt`, `icon`, `tools`, `skills`, and `enabled` fields.
 - **Web UI integration** – Select roles from a dropdown in the chat interface. Role selection affects both AI behavior and available tool suggestions.
 
 **Creating a custom role (example):**
@@ -159,9 +161,24 @@ go build -o cyberstrike-ai cmd/server/main.go
      - api-fuzzer
      - arjun
      - graphql-scanner
+   skills:
+     - api-security-testing
+     - sql-injection-testing
    enabled: true
    ```
 2. Restart the server or reload configuration; the role appears in the role selector dropdown.
+
+### Skills System
+- **Predefined skills** – System includes 20+ predefined security testing skills (SQL injection, XSS, API security, cloud security, container security, etc.) in the `skills/` directory.
+- **Automatic injection** – When a role is selected, all skills attached to that role are automatically loaded and injected into the system prompt, providing AI with specialized knowledge and methodologies.
+- **On-demand access** – AI agents can also access skills on-demand using built-in tools (`list_skills`, `read_skill`), allowing dynamic skill retrieval during task execution.
+- **Structured format** – Each skill is a directory containing a `SKILL.md` file with detailed testing methods, tool usage, best practices, and examples. Skills support YAML front matter for metadata.
+- **Custom skills** – Create custom skills by adding directories to the `skills/` directory. Each skill directory should contain a `SKILL.md` file with the skill content.
+
+**Creating a custom skill:**
+1. Create a directory in `skills/` (e.g., `skills/my-skill/`)
+2. Create a `SKILL.md` file in that directory with the skill content
+3. Attach the skill to a role by adding it to the role's `skills` field in the role YAML file
 
 ### Tool Orchestration & Extensions
 - **YAML recipes** in `tools/*.yaml` describe commands, arguments, prompts, and metadata.
@@ -364,6 +381,7 @@ knowledge:
     similarity_threshold: 0.7  # Minimum similarity score (0-1)
     hybrid_weight: 0.7  # Weight for vector search (1.0 = pure vector, 0.0 = pure keyword)
 roles_dir: "roles"  # Role configuration directory (relative to config file)
+skills_dir: "skills"  # Skills directory (relative to config file)
 ```
 
 ### Tool Definition Example (`tools/nmap.yaml`)
@@ -415,6 +433,7 @@ CyberStrikeAI/
 ├── web/                 # Static SPA + templates
 ├── tools/               # YAML tool recipes (100+ examples provided)
 ├── roles/               # Role configurations (12+ predefined security testing roles)
+├── skills/              # Skills directory (20+ predefined security testing skills)
 ├── img/                 # Docs screenshots & diagrams
 ├── config.yaml          # Runtime configuration
 ├── run.sh               # Convenience launcher
@@ -446,6 +465,7 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history and all changes.
 
 ### Recent Highlights
 
+- **2026-01-XX** – Skills system with 20+ predefined security testing skills
 - **2026-01-11** – Role-based testing with predefined security testing roles
 - **2026-01-08** – SSE transport mode support for external MCP servers
 - **2026-01-01** – Batch task management with queue-based execution

@@ -8,7 +8,7 @@ function initRouter() {
     if (hash) {
         const hashParts = hash.split('?');
         const pageId = hashParts[0];
-        if (pageId && ['chat', 'vulnerabilities', 'mcp-monitor', 'mcp-management', 'knowledge-management', 'knowledge-retrieval-logs', 'roles-management', 'settings', 'tasks'].includes(pageId)) {
+        if (pageId && ['chat', 'vulnerabilities', 'mcp-monitor', 'mcp-management', 'knowledge-management', 'knowledge-retrieval-logs', 'roles-management', 'skills-monitor', 'skills-management', 'settings', 'tasks'].includes(pageId)) {
             switchPage(pageId);
             
             // 如果是chat页面且带有conversation参数，加载对应对话
@@ -98,6 +98,19 @@ function updateNavState(pageId) {
         if (submenuItem) {
             submenuItem.classList.add('active');
         }
+    } else if (pageId === 'skills-monitor' || pageId === 'skills-management') {
+        // Skills子菜单项
+        const skillsItem = document.querySelector('.nav-item[data-page="skills"]');
+        if (skillsItem) {
+            skillsItem.classList.add('active');
+            // 展开Skills子菜单
+            skillsItem.classList.add('expanded');
+        }
+        
+        const submenuItem = document.querySelector(`.nav-submenu-item[data-page="${pageId}"]`);
+        if (submenuItem) {
+            submenuItem.classList.add('active');
+        }
     } else if (pageId === 'roles-management') {
         // 角色子菜单项
         const rolesItem = document.querySelector('.nav-item[data-page="roles"]');
@@ -105,6 +118,19 @@ function updateNavState(pageId) {
             rolesItem.classList.add('active');
             // 展开角色子菜单
             rolesItem.classList.add('expanded');
+        }
+        
+        const submenuItem = document.querySelector(`.nav-submenu-item[data-page="${pageId}"]`);
+        if (submenuItem) {
+            submenuItem.classList.add('active');
+        }
+    } else if (pageId === 'skills-monitor' || pageId === 'skills-management') {
+        // Skills子菜单项
+        const skillsItem = document.querySelector('.nav-item[data-page="skills"]');
+        if (skillsItem) {
+            skillsItem.classList.add('active');
+            // 展开Skills子菜单
+            skillsItem.classList.add('expanded');
         }
         
         const submenuItem = document.querySelector(`.nav-submenu-item[data-page="${pageId}"]`);
@@ -262,6 +288,21 @@ function initPage(pageId) {
                 });
             }
             break;
+        case 'skills-monitor':
+            // 初始化Skills状态监控页面
+            if (typeof loadSkillsMonitor === 'function') {
+                loadSkillsMonitor();
+            }
+            break;
+        case 'skills-management':
+            // 初始化Skills管理页面
+            if (typeof initSkillsPagination === 'function') {
+                initSkillsPagination();
+            }
+            if (typeof loadSkills === 'function') {
+                loadSkills();
+            }
+            break;
     }
     
     // 清理其他页面的定时器
@@ -282,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const hashParts = hash.split('?');
         const pageId = hashParts[0];
         
-        if (pageId && ['chat', 'tasks', 'vulnerabilities', 'mcp-monitor', 'mcp-management', 'knowledge-management', 'knowledge-retrieval-logs', 'settings'].includes(pageId)) {
+        if (pageId && ['chat', 'tasks', 'vulnerabilities', 'mcp-monitor', 'mcp-management', 'knowledge-management', 'knowledge-retrieval-logs', 'roles-management', 'skills-monitor', 'skills-management', 'settings'].includes(pageId)) {
             switchPage(pageId);
             
             // 如果是chat页面且带有conversation参数，加载对应对话

@@ -104,6 +104,17 @@ func (db *DB) initTables() error {
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 
+	// 创建Skills统计表
+	createSkillStatsTable := `
+	CREATE TABLE IF NOT EXISTS skill_stats (
+		skill_name TEXT PRIMARY KEY,
+		total_calls INTEGER NOT NULL DEFAULT 0,
+		success_calls INTEGER NOT NULL DEFAULT 0,
+		failed_calls INTEGER NOT NULL DEFAULT 0,
+		last_call_time DATETIME,
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);`
+
 	// 创建攻击链节点表
 	createAttackChainNodesTable := `
 	CREATE TABLE IF NOT EXISTS attack_chain_nodes (
@@ -262,6 +273,10 @@ func (db *DB) initTables() error {
 
 	if _, err := db.Exec(createToolStatsTable); err != nil {
 		return fmt.Errorf("创建tool_stats表失败: %w", err)
+	}
+
+	if _, err := db.Exec(createSkillStatsTable); err != nil {
+		return fmt.Errorf("创建skill_stats表失败: %w", err)
 	}
 
 	if _, err := db.Exec(createAttackChainNodesTable); err != nil {

@@ -860,6 +860,20 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
         ALLOW_DATA_ATTR: false,
     };
     
+    // HTML实体编码函数
+    const escapeHtml = (text) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    
+    // 注意：代码块内容不需要转义，因为：
+    // 1. Markdown解析后，代码块会被包裹在<code>或<pre>标签中
+    // 2. 浏览器不会执行<code>和<pre>标签内的HTML（它们是文本节点）
+    // 3. DOMPurify会保留这些标签内的文本内容
+    // 这样既能防止XSS，又能正常显示代码
+    
     const parseMarkdown = (raw) => {
         if (typeof marked === 'undefined') {
             return null;
@@ -880,11 +894,47 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
     if (role === 'user') {
         formattedContent = escapeHtml(content).replace(/\n/g, '<br>');
     } else if (typeof DOMPurify !== 'undefined') {
+        // 直接解析Markdown（代码块会被包裹在<code>/<pre>中，DOMPurify会保留其文本内容）
         let parsedContent = parseMarkdown(content);
         if (!parsedContent) {
-            // 如果 Markdown 解析失败或 marked 不可用，则退回原始内容
             parsedContent = content;
         }
+        
+        // 使用DOMPurify清理，只添加必要的URL验证钩子（DOMPurify默认会处理事件处理器等）
+        if (DOMPurify.addHook) {
+            // 移除之前可能存在的钩子
+            try {
+                DOMPurify.removeHook('uponSanitizeAttribute');
+            } catch (e) {
+                // 钩子不存在，忽略
+            }
+            
+            // 只验证URL属性，防止危险协议（DOMPurify默认会处理事件处理器、style等）
+            DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+                const attrName = data.attrName.toLowerCase();
+                
+                // 只验证URL属性（src, href）
+                if ((attrName === 'src' || attrName === 'href') && data.attrValue) {
+                    const value = data.attrValue.trim().toLowerCase();
+                    // 禁止危险协议
+                    if (value.startsWith('javascript:') || 
+                        value.startsWith('vbscript:') ||
+                        value.startsWith('data:text/html') ||
+                        value.startsWith('data:text/javascript')) {
+                        data.keepAttr = false;
+                        return;
+                    }
+                    // 对于img的src，禁止可疑的短URL（防止404和XSS）
+                    if (attrName === 'src' && node.tagName && node.tagName.toLowerCase() === 'img') {
+                        if (value.length <= 2 || /^[a-z]$/i.test(value)) {
+                            data.keepAttr = false;
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+        
         formattedContent = DOMPurify.sanitize(parsedContent, defaultSanitizeConfig);
     } else if (typeof marked !== 'undefined') {
         const parsedContent = parseMarkdown(content);
@@ -898,6 +948,22 @@ function addMessage(role, content, mcpExecutionIds = null, progressId = null, cr
     }
     
     bubble.innerHTML = formattedContent;
+    
+    // 最后的安全检查：只处理明显的可疑图片（防止404和XSS）
+    // DOMPurify已经处理了大部分XSS向量，这里只做必要的补充
+    const images = bubble.querySelectorAll('img');
+    images.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src) {
+            const trimmedSrc = src.trim();
+            // 只检查明显的可疑URL（短字符串、单个字符）
+            if (trimmedSrc.length <= 2 || /^[a-z]$/i.test(trimmedSrc)) {
+                img.remove();
+            }
+        } else {
+            img.remove();
+        }
+    });
     
     // 为每个表格添加独立的滚动容器
     wrapTablesInBubble(bubble);
@@ -1644,7 +1710,11 @@ function createConversationListItem(conversation) {
     };
     item.appendChild(deleteBtn);
 
-    item.onclick = () => loadConversation(conversation.id);
+    item.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        loadConversation(conversation.id);
+    };
     return item;
 }
 
@@ -3894,7 +3964,9 @@ function createConversationListItemWithMenu(conversation, isPinned) {
     };
     item.appendChild(menuBtn);
 
-    item.onclick = () => {
+    item.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (currentGroupId) {
             exitGroupDetail();
         }
@@ -5269,7 +5341,9 @@ async function loadGroupConversations(groupId, searchQuery = '') {
                 };
                 item.appendChild(menuBtn);
 
-                item.onclick = () => {
+                item.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     // 切换到对话界面，但保持分组详情状态
                     const groupDetailPage = document.getElementById('group-detail-page');
                     const chatContainer = document.querySelector('.chat-container');

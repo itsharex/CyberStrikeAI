@@ -10,7 +10,7 @@ let knowledgePagination = {
     total: 0,
     currentCategory: ''
 };
-let searchTimeout = null; // 搜索防抖定时器
+let knowledgeSearchTimeout = null; // 搜索防抖定时器
 
 // 加载知识分类
 async function loadKnowledgeCategories() {
@@ -639,8 +639,8 @@ function handleKnowledgeSearchInput() {
     const searchTerm = searchInput?.value.trim() || '';
     
     // 清除之前的定时器
-    if (searchTimeout) {
-        clearTimeout(searchTimeout);
+    if (knowledgeSearchTimeout) {
+        clearTimeout(knowledgeSearchTimeout);
     }
     
     // 如果搜索框为空，立即恢复列表
@@ -656,7 +656,7 @@ function handleKnowledgeSearchInput() {
     }
     
     // 有搜索词时，延迟500ms后执行搜索（防抖）
-    searchTimeout = setTimeout(() => {
+    knowledgeSearchTimeout = setTimeout(() => {
         searchKnowledgeItems();
     }, 500);
 }

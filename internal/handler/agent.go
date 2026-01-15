@@ -15,6 +15,7 @@ import (
 	"cyberstrike-ai/internal/config"
 	"cyberstrike-ai/internal/database"
 	"cyberstrike-ai/internal/mcp/builtin"
+	"cyberstrike-ai/internal/skills"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -72,6 +73,7 @@ type AgentHandler struct {
 	knowledgeManager interface {    // 知识库管理器接口
 		LogRetrieval(conversationID, messageID, query, riskType string, retrievedItems []string) error
 	}
+	skillsManager *skills.Manager // Skills管理器
 }
 
 // NewAgentHandler 创建新的Agent处理器
@@ -99,6 +101,11 @@ func (h *AgentHandler) SetKnowledgeManager(manager interface {
 	LogRetrieval(conversationID, messageID, query, riskType string, retrievedItems []string) error
 }) {
 	h.knowledgeManager = manager
+}
+
+// SetSkillsManager 设置Skills管理器
+func (h *AgentHandler) SetSkillsManager(manager *skills.Manager) {
+	h.skillsManager = manager
 }
 
 // ChatRequest 聊天请求
@@ -169,6 +176,7 @@ func (h *AgentHandler) AgentLoop(c *gin.Context) {
 	// 应用角色用户提示词和工具配置
 	finalMessage := req.Message
 	var roleTools []string // 角色配置的工具列表
+	var roleSkills []string // 角色配置的skills列表（用于提示AI，但不硬编码内容）
 	if req.Role != "" && req.Role != "默认" {
 		if h.config.Roles != nil {
 			if role, exists := h.config.Roles[req.Role]; exists && role.Enabled {
@@ -182,6 +190,11 @@ func (h *AgentHandler) AgentLoop(c *gin.Context) {
 					roleTools = role.Tools
 					h.logger.Info("使用角色配置的工具列表", zap.String("role", req.Role), zap.Int("toolCount", len(roleTools)))
 				}
+				// 获取角色配置的skills列表（用于在系统提示词中提示AI，但不硬编码内容）
+				if len(role.Skills) > 0 {
+					roleSkills = role.Skills
+					h.logger.Info("角色配置了skills，将在系统提示词中提示AI", zap.String("role", req.Role), zap.Int("skillCount", len(roleSkills)), zap.Strings("skills", roleSkills))
+				}
 			}
 		}
 	}
@@ -193,7 +206,8 @@ func (h *AgentHandler) AgentLoop(c *gin.Context) {
 	}
 
 	// 执行Agent Loop，传入历史消息和对话ID（使用包含角色提示词的finalMessage和角色工具列表）
-	result, err := h.agent.AgentLoopWithProgress(c.Request.Context(), finalMessage, agentHistoryMessages, conversationID, nil, roleTools)
+	// 注意：skills不会硬编码注入，但会在系统提示词中提示AI这个角色推荐使用哪些skills
+	result, err := h.agent.AgentLoopWithProgress(c.Request.Context(), finalMessage, agentHistoryMessages, conversationID, nil, roleTools, roleSkills)
 	if err != nil {
 		h.logger.Error("Agent Loop执行失败", zap.Error(err))
 
@@ -515,6 +529,10 @@ func (h *AgentHandler) AgentLoopStream(c *gin.Context) {
 					// 因为mcps是MCP服务器名称，不是工具列表
 					h.logger.Info("角色配置使用旧的mcps字段，将使用所有工具", zap.String("role", req.Role))
 				}
+				// 注意：角色配置的skills不再硬编码注入，AI可以通过list_skills和read_skill工具按需调用
+				if len(role.Skills) > 0 {
+					h.logger.Info("角色配置了skills，AI可通过工具按需调用", zap.String("role", req.Role), zap.Int("skillCount", len(role.Skills)), zap.Strings("skills", role.Skills))
+				}
 			}
 		}
 	}
@@ -599,7 +617,18 @@ func (h *AgentHandler) AgentLoopStream(c *gin.Context) {
 
 	// 执行Agent Loop，传入独立的上下文，确保任务不会因客户端断开而中断（使用包含角色提示词的finalMessage和角色工具列表）
 	sendEvent("progress", "正在分析您的请求...", nil)
-	result, err := h.agent.AgentLoopWithProgress(taskCtx, finalMessage, agentHistoryMessages, conversationID, progressCallback, roleTools)
+	// 注意：skills不会硬编码注入，但会在系统提示词中提示AI这个角色推荐使用哪些skills
+	var roleSkills []string // 角色配置的skills列表（用于提示AI，但不硬编码内容）
+	if req.Role != "" && req.Role != "默认" {
+		if h.config.Roles != nil {
+			if role, exists := h.config.Roles[req.Role]; exists && role.Enabled {
+				if len(role.Skills) > 0 {
+					roleSkills = role.Skills
+				}
+			}
+		}
+	}
+	result, err := h.agent.AgentLoopWithProgress(taskCtx, finalMessage, agentHistoryMessages, conversationID, progressCallback, roleTools, roleSkills)
 	if err != nil {
 		h.logger.Error("Agent Loop执行失败", zap.Error(err))
 		cause := context.Cause(baseCtx)
@@ -1099,6 +1128,7 @@ func (h *AgentHandler) executeBatchQueue(queueID string) {
 		// 应用角色用户提示词和工具配置
 		finalMessage := task.Message
 		var roleTools []string // 角色配置的工具列表
+		var roleSkills []string // 角色配置的skills列表（用于提示AI，但不硬编码内容）
 		if queue.Role != "" && queue.Role != "默认" {
 			if h.config.Roles != nil {
 				if role, exists := h.config.Roles[queue.Role]; exists && role.Enabled {
@@ -1111,6 +1141,11 @@ func (h *AgentHandler) executeBatchQueue(queueID string) {
 					if len(role.Tools) > 0 {
 						roleTools = role.Tools
 						h.logger.Info("使用角色配置的工具列表", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("role", queue.Role), zap.Int("toolCount", len(roleTools)))
+					}
+					// 获取角色配置的skills列表（用于在系统提示词中提示AI，但不硬编码内容）
+					if len(role.Skills) > 0 {
+						roleSkills = role.Skills
+						h.logger.Info("角色配置了skills，将在系统提示词中提示AI", zap.String("queueId", queueID), zap.String("taskId", task.ID), zap.String("role", queue.Role), zap.Int("skillCount", len(roleSkills)), zap.Strings("skills", roleSkills))
 					}
 				}
 			}
@@ -1144,7 +1179,8 @@ func (h *AgentHandler) executeBatchQueue(queueID string) {
 		// 存储取消函数，以便在取消队列时能够取消当前任务
 		h.batchTaskManager.SetTaskCancel(queueID, cancel)
 		// 使用队列配置的角色工具列表（如果为空，表示使用所有工具）
-		result, err := h.agent.AgentLoopWithProgress(ctx, finalMessage, []agent.ChatMessage{}, conversationID, progressCallback, roleTools)
+		// 注意：skills不会硬编码注入，但会在系统提示词中提示AI这个角色推荐使用哪些skills
+		result, err := h.agent.AgentLoopWithProgress(ctx, finalMessage, []agent.ChatMessage{}, conversationID, progressCallback, roleTools, roleSkills)
 		// 任务执行完成，清理取消函数
 		h.batchTaskManager.SetTaskCancel(queueID, nil)
 		cancel()

@@ -25,6 +25,7 @@ type Config struct {
 	Knowledge   KnowledgeConfig   `yaml:"knowledge,omitempty"`
 	RolesDir    string            `yaml:"roles_dir,omitempty" json:"roles_dir,omitempty"` // 角色配置文件目录（新方式）
 	Roles       map[string]RoleConfig `yaml:"roles,omitempty" json:"roles,omitempty"`     // 向后兼容：支持在主配置文件中定义角色
+	SkillsDir   string            `yaml:"skills_dir,omitempty" json:"skills_dir,omitempty"` // Skills配置文件目录
 }
 
 type ServerConfig struct {
@@ -581,5 +582,6 @@ type RoleConfig struct {
 	Icon        string   `yaml:"icon,omitempty" json:"icon,omitempty"` // 角色图标（可选）
 	Tools       []string `yaml:"tools,omitempty" json:"tools,omitempty"` // 关联的工具列表（toolKey格式，如 "toolName" 或 "mcpName::toolName"）
 	MCPs        []string `yaml:"mcps,omitempty" json:"mcps,omitempty"` // 向后兼容：关联的MCP服务器列表（已废弃，使用tools替代）
+	Skills      []string `yaml:"skills,omitempty" json:"skills,omitempty"` // 关联的skills列表（skill名称列表，在执行任务前会读取这些skills的内容）
 	Enabled     bool     `yaml:"enabled" json:"enabled"`         // 是否启用
 }

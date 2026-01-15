@@ -9,6 +9,10 @@ const (
 	// 知识库工具
 	ToolListKnowledgeRiskTypes = "list_knowledge_risk_types"
 	ToolSearchKnowledgeBase    = "search_knowledge_base"
+
+	// Skills工具
+	ToolListSkills    = "list_skills"
+	ToolReadSkill     = "read_skill"
 )
 
 // IsBuiltinTool 检查工具名称是否是内置工具
@@ -16,7 +20,9 @@ func IsBuiltinTool(toolName string) bool {
 	switch toolName {
 	case ToolRecordVulnerability,
 		ToolListKnowledgeRiskTypes,
-		ToolSearchKnowledgeBase:
+		ToolSearchKnowledgeBase,
+		ToolListSkills,
+		ToolReadSkill:
 		return true
 	default:
 		return false
@@ -29,5 +35,7 @@ func GetAllBuiltinTools() []string {
 		ToolRecordVulnerability,
 		ToolListKnowledgeRiskTypes,
 		ToolSearchKnowledgeBase,
+		ToolListSkills,
+		ToolReadSkill,
 	}
 }

@@ -840,6 +840,8 @@ header {
     justify-content: space-between;
     gap: 8px;
     position: relative;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .conversation-item:hover {
@@ -3260,6 +3262,189 @@ header {
     flex-wrap: wrap;
 }
 
+.pagination-container {
+    margin-top: 16px;
+}
+
+/* Skills管理页面分页优化 */
+.page-content-with-pagination {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+.skills-list-with-pagination {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    /* 为分页组件预留空间，确保视觉连接自然 */
+    padding-bottom: 0;
+}
+
+.pagination-fixed {
+    background: var(--bg-primary);
+    margin-top: 0;
+    padding: 0;
+    /* 确保分页组件宽度与内容区域一致，不包括滚动条 */
+    width: 100%;
+    box-sizing: border-box;
+    /* 确保分页组件不延伸到滚动条区域 */
+    overflow: hidden;
+    /* 当列表有滚动条时，分页组件应该与内容区域对齐 */
+    position: relative;
+}
+
+.pagination-fixed .pagination {
+    margin-top: 0;
+    border-top: 1px solid var(--border-color);
+    padding: 16px 20px;
+    background: var(--bg-primary);
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    /* 确保分页内容与列表内容对齐 */
+    width: 100%;
+    box-sizing: border-box;
+    /* 柔和的顶部边框，与列表自然分离 */
+    border-top-color: rgba(233, 236, 239, 0.6);
+}
+
+/* 左侧：信息显示和每页数量选择器 - 更自然的设计 */
+.pagination-fixed .pagination-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    /* 去掉背景色和边框，更自然 */
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+}
+
+.pagination-fixed .pagination-info span {
+    color: var(--text-primary);
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+.pagination-fixed .pagination-info .pagination-page-size {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+.pagination-fixed .pagination-info .pagination-page-size select {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 70px;
+    font-weight: 500;
+    /* 更柔和的边框 */
+    border-color: rgba(233, 236, 239, 0.8);
+}
+
+.pagination-fixed .pagination-info .pagination-page-size select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+    background: var(--bg-primary);
+}
+
+.pagination-fixed .pagination-info .pagination-page-size select:hover {
+    border-color: var(--accent-color);
+    background: var(--bg-secondary);
+}
+
+/* 右侧：分页按钮组 - 更统一的设计 */
+.pagination-fixed .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pagination-fixed .pagination-controls .btn-secondary {
+    padding: 7px 14px;
+    font-size: 0.875rem;
+    min-width: auto;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    /* 更柔和的边框 */
+    border-color: rgba(233, 236, 239, 0.8);
+}
+
+.pagination-fixed .pagination-controls .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 102, 255, 0.1);
+}
+
+.pagination-fixed .pagination-controls .btn-secondary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 102, 255, 0.08);
+}
+
+.pagination-fixed .pagination-controls .btn-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+.pagination-fixed .pagination-page {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    padding: 0 12px;
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+    .pagination-fixed .pagination {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+        padding: 16px;
+    }
+    
+    .pagination-fixed .pagination-info {
+        width: 100%;
+        justify-content: center;
+        gap: 16px;
+    }
+    
+    .pagination-fixed .pagination-controls {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .pagination-fixed .pagination-controls .btn-secondary {
+        flex: 1;
+        min-width: 60px;
+        max-width: 120px;
+    }
+}
+
 .pagination-info {
     font-size: 0.875rem;
     color: var(--text-secondary);
@@ -3655,6 +3840,14 @@ header {
     overflow-wrap: break-word;
 }
 
+.monitor-table th {
+    white-space: nowrap;
+}
+
+.monitor-table td {
+    white-space: nowrap;
+}
+
 .monitor-table td:nth-child(2) {
     max-width: 250px;
     overflow: hidden;
@@ -3754,13 +3947,30 @@ header {
     width: 18px;
     height: 18px;
     accent-color: var(--accent-color);
+    margin: 0;
+    vertical-align: middle;
+    display: inline-block;
 }
 
-.monitor-table th:first-child,
-.monitor-table td:first-child {
+/* 确保复选框单元格垂直居中 */
+.monitor-table td:first-child,
+.monitor-table th:first-child {
     text-align: center;
-    width: 40px;
+    vertical-align: middle;
 }
+
+/* 统一表头复选框大小 */
+#monitor-select-all {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-color);
+    margin: 0;
+    vertical-align: middle;
+    display: inline-block;
+}
+
+/* 移除第一列的特殊样式，让表格更灵活 */
 
 .monitor-vuln-container {
     display: grid;
@@ -8783,4 +8993,322 @@ header {
         top: 8px;
         right: 8px;
     }
+}
+
+/* Skills选择相关样式 */
+.role-skills-controls {
+    margin-bottom: 12px;
+}
+
+.role-skills-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.role-skills-search-box {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.role-skills-search-box input {
+    width: 100%;
+    padding: 8px 32px 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+.role-skills-search-box input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+
+.role-skills-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.role-skills-search-clear:hover {
+    color: var(--text-primary);
+}
+
+.role-skills-stats {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.role-skills-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--bg-primary);
+}
+
+.role-skill-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    transition: all 0.2s ease;
+    margin-bottom: 6px;
+}
+
+.role-skill-item:last-child {
+    margin-bottom: 0;
+}
+
+.role-skill-item:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 4px rgba(0, 102, 255, 0.1);
+}
+
+.role-skill-item .checkbox-text {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.skills-loading,
+.skills-empty,
+.skills-error {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.skills-error {
+    color: var(--error-color);
+}
+
+/* Skills管理页面样式 */
+.skills-controls {
+    margin-bottom: 24px;
+}
+
+.skills-stats-bar {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.skill-stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.skill-stat-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.skill-stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.skills-filters {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.skills-filters input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.skills-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.skill-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.skill-item:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 8px rgba(0, 102, 255, 0.1);
+}
+
+.skill-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.skill-item-info {
+    flex: 1;
+}
+
+.skill-item-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+
+.skill-item-desc {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.skill-item-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.btn-icon.btn-danger:hover {
+    background: rgba(220, 53, 69, 0.1);
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.skill-item-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.skill-meta-item {
+    display: flex;
+    align-items: center;
+}
+
+/* Skills监控页面样式 */
+.skills-monitor-controls {
+    margin-bottom: 24px;
+}
+
+.skills-monitor-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.skill-monitor-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    transition: all 0.2s;
+}
+
+.skill-monitor-item:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 8px rgba(0, 102, 255, 0.1);
+}
+
+.skill-monitor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.skill-monitor-info {
+    flex: 1;
+}
+
+.skill-monitor-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+
+.skill-monitor-desc {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.skill-monitor-status {
+    display: flex;
+    align-items: center;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-success {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.skill-monitor-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
 }

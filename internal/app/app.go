@@ -19,6 +19,7 @@ import (
 	"cyberstrike-ai/internal/mcp/builtin"
 	"cyberstrike-ai/internal/openai"
 	"cyberstrike-ai/internal/security"
+	"cyberstrike-ai/internal/skills"
 	"cyberstrike-ai/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -215,53 +216,53 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 				return
 			}
 
-				if hasIndex {
-					// 如果已有索引，只索引新添加或更新的项
-					if len(itemsToIndex) > 0 {
-						log.Logger.Info("检测到已有知识库索引，开始增量索引", zap.Int("count", len(itemsToIndex)))
-						ctx := context.Background()
-						consecutiveFailures := 0
-						var firstFailureItemID string
-						var firstFailureError error
-						failedCount := 0
-						
-						for _, itemID := range itemsToIndex {
-							if err := knowledgeIndexer.IndexItem(ctx, itemID); err != nil {
-								failedCount++
-								consecutiveFailures++
-								
-								if consecutiveFailures == 1 {
-									firstFailureItemID = itemID
-									firstFailureError = err
-									log.Logger.Warn("索引知识项失败", zap.String("itemId", itemID), zap.Error(err))
-								}
-								
-								// 如果连续失败2次，立即停止增量索引
-								if consecutiveFailures >= 2 {
-									log.Logger.Error("连续索引失败次数过多，立即停止增量索引",
-										zap.Int("consecutiveFailures", consecutiveFailures),
-										zap.Int("totalItems", len(itemsToIndex)),
-										zap.String("firstFailureItemId", firstFailureItemID),
-										zap.Error(firstFailureError),
-									)
-									break
-								}
-								continue
+			if hasIndex {
+				// 如果已有索引，只索引新添加或更新的项
+				if len(itemsToIndex) > 0 {
+					log.Logger.Info("检测到已有知识库索引，开始增量索引", zap.Int("count", len(itemsToIndex)))
+					ctx := context.Background()
+					consecutiveFailures := 0
+					var firstFailureItemID string
+					var firstFailureError error
+					failedCount := 0
+
+					for _, itemID := range itemsToIndex {
+						if err := knowledgeIndexer.IndexItem(ctx, itemID); err != nil {
+							failedCount++
+							consecutiveFailures++
+
+							if consecutiveFailures == 1 {
+								firstFailureItemID = itemID
+								firstFailureError = err
+								log.Logger.Warn("索引知识项失败", zap.String("itemId", itemID), zap.Error(err))
 							}
-							
-							// 成功时重置连续失败计数
-							if consecutiveFailures > 0 {
-								consecutiveFailures = 0
-								firstFailureItemID = ""
-								firstFailureError = nil
+
+							// 如果连续失败2次，立即停止增量索引
+							if consecutiveFailures >= 2 {
+								log.Logger.Error("连续索引失败次数过多，立即停止增量索引",
+									zap.Int("consecutiveFailures", consecutiveFailures),
+									zap.Int("totalItems", len(itemsToIndex)),
+									zap.String("firstFailureItemId", firstFailureItemID),
+									zap.Error(firstFailureError),
+								)
+								break
 							}
+							continue
 						}
-						log.Logger.Info("增量索引完成", zap.Int("totalItems", len(itemsToIndex)), zap.Int("failedCount", failedCount))
-					} else {
-						log.Logger.Info("检测到已有知识库索引，没有需要索引的新项或更新项")
+
+						// 成功时重置连续失败计数
+						if consecutiveFailures > 0 {
+							consecutiveFailures = 0
+							firstFailureItemID = ""
+							firstFailureError = nil
+						}
 					}
-					return
+					log.Logger.Info("增量索引完成", zap.Int("totalItems", len(itemsToIndex)), zap.Int("failedCount", failedCount))
+				} else {
+					log.Logger.Info("检测到已有知识库索引，没有需要索引的新项或更新项")
 				}
+				return
+			}
 
 			// 只有在没有索引时才自动重建
 			log.Logger.Info("未检测到知识库索引，开始自动构建索引")
@@ -278,8 +279,30 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 		configPath = os.Args[1]
 	}
 
+	// 初始化Skills管理器
+	skillsDir := cfg.SkillsDir
+	if skillsDir == "" {
+		skillsDir = "skills" // 默认目录
+	}
+	// 如果是相对路径，相对于配置文件所在目录
+	configDir := filepath.Dir(configPath)
+	if !filepath.IsAbs(skillsDir) {
+		skillsDir = filepath.Join(configDir, skillsDir)
+	}
+	skillsManager := skills.NewManager(skillsDir, log.Logger)
+	log.Logger.Info("Skills管理器已初始化", zap.String("skillsDir", skillsDir))
+
+	// 注册Skills工具到MCP服务器（让AI可以按需调用，带数据库存储支持统计）
+	// 创建一个适配器，将database.DB适配为SkillStatsStorage接口
+	var skillStatsStorage skills.SkillStatsStorage
+	if db != nil {
+		skillStatsStorage = &skillStatsDBAdapter{db: db}
+	}
+	skills.RegisterSkillsToolWithStorage(mcpServer, skillsManager, skillStatsStorage, log.Logger)
+
 	// 创建处理器
 	agentHandler := handler.NewAgentHandler(agent, db, cfg, log.Logger)
+	agentHandler.SetSkillsManager(skillsManager) // 设置Skills管理器
 	// 如果知识库已启用，设置知识库管理器到AgentHandler以便记录检索日志
 	if knowledgeManager != nil {
 		agentHandler.SetKnowledgeManager(knowledgeManager)
@@ -294,6 +317,11 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 	configHandler := handler.NewConfigHandler(configPath, cfg, mcpServer, executor, agent, attackChainHandler, externalMCPMgr, log.Logger)
 	externalMCPHandler := handler.NewExternalMCPHandler(externalMCPMgr, cfg, configPath, log.Logger)
 	roleHandler := handler.NewRoleHandler(cfg, configPath, log.Logger)
+	roleHandler.SetSkillsManager(skillsManager) // 设置Skills管理器到RoleHandler
+	skillsHandler := handler.NewSkillsHandler(skillsManager, cfg, configPath, log.Logger)
+	if db != nil {
+		skillsHandler.SetDB(db) // 设置数据库连接以便获取调用统计
+	}
 
 	// 创建 App 实例（部分字段稍后填充）
 	app := &App{
@@ -371,6 +399,7 @@ func New(cfg *config.Config, log *logger.Logger) (*App, error) {
 		app, // 传递 App 实例以便动态获取 knowledgeHandler
 		vulnerabilityHandler,
 		roleHandler,
+		skillsHandler,
 		mcpServer,
 		authManager,
 	)
@@ -432,6 +461,7 @@ func setupRoutes(
 	app *App, // 传递 App 实例以便动态获取 knowledgeHandler
 	vulnerabilityHandler *handler.VulnerabilityHandler,
 	roleHandler *handler.RoleHandler,
+	skillsHandler *handler.SkillsHandler,
 	mcpServer *mcp.Server,
 	authManager *security.AuthManager,
 ) {
@@ -660,9 +690,21 @@ func setupRoutes(
 		// 角色管理
 		protected.GET("/roles", roleHandler.GetRoles)
 		protected.GET("/roles/:name", roleHandler.GetRole)
+		protected.GET("/roles/skills/list", roleHandler.GetSkills)
 		protected.POST("/roles", roleHandler.CreateRole)
 		protected.PUT("/roles/:name", roleHandler.UpdateRole)
 		protected.DELETE("/roles/:name", roleHandler.DeleteRole)
+
+		// Skills管理
+		protected.GET("/skills", skillsHandler.GetSkills)
+		protected.GET("/skills/stats", skillsHandler.GetSkillStats)
+		protected.DELETE("/skills/stats", skillsHandler.ClearSkillStats)
+		protected.GET("/skills/:name", skillsHandler.GetSkill)
+		protected.GET("/skills/:name/bound-roles", skillsHandler.GetSkillBoundRoles)
+		protected.POST("/skills", skillsHandler.CreateSkill)
+		protected.PUT("/skills/:name", skillsHandler.UpdateSkill)
+		protected.DELETE("/skills/:name", skillsHandler.DeleteSkill)
+		protected.DELETE("/skills/:name/stats", skillsHandler.ClearSkillStatsByName)
 
 		// MCP端点
 		protected.POST("/mcp", func(c *gin.Context) {
@@ -979,18 +1021,18 @@ func initializeKnowledge(
 				var firstFailureItemID string
 				var firstFailureError error
 				failedCount := 0
-				
+
 				for _, itemID := range itemsToIndex {
 					if err := knowledgeIndexer.IndexItem(ctx, itemID); err != nil {
 						failedCount++
 						consecutiveFailures++
-						
+
 						if consecutiveFailures == 1 {
 							firstFailureItemID = itemID
 							firstFailureError = err
 							logger.Warn("索引知识项失败", zap.String("itemId", itemID), zap.Error(err))
 						}
-						
+
 						// 如果连续失败2次，立即停止增量索引
 						if consecutiveFailures >= 2 {
 							logger.Error("连续索引失败次数过多，立即停止增量索引",
@@ -1003,7 +1045,7 @@ func initializeKnowledge(
 						}
 						continue
 					}
-					
+
 					// 成功时重置连续失败计数
 					if consecutiveFailures > 0 {
 						consecutiveFailures = 0
