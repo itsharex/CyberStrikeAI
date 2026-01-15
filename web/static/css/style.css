@@ -3295,6 +3295,8 @@ header {
     overflow: hidden;
     /* 当列表有滚动条时，分页组件应该与内容区域对齐 */
     position: relative;
+    /* 添加四个角的圆角，与上方卡片保持一致 */
+    border-radius: 8px;
 }
 
 .pagination-fixed .pagination {
@@ -3311,6 +3313,8 @@ header {
     box-sizing: border-box;
     /* 柔和的顶部边框，与列表自然分离 */
     border-top-color: rgba(233, 236, 239, 0.6);
+    /* 添加四个角的圆角，与上方卡片保持一致 */
+    border-radius: 8px;
 }
 
 /* 左侧：信息显示和每页数量选择器 - 更自然的设计 */
@@ -3383,6 +3387,7 @@ header {
     min-width: auto;
     transition: all 0.2s ease;
     font-weight: 500;
+    border-radius: 8px;
     /* 更柔和的边框 */
     border-color: rgba(233, 236, 239, 0.8);
 }
