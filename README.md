@@ -7,7 +7,7 @@
 
 [中文](README_CN.md) | [English](README.md)
 
-CyberStrikeAI is an **AI-native security testing platform** built in Go. It integrates 100+ security tools, an intelligent orchestration engine, and comprehensive lifecycle management capabilities. Through native MCP protocol and AI agents, it enables end-to-end automation from conversational commands to vulnerability discovery, attack-chain analysis, knowledge retrieval, and result visualization—delivering an auditable, traceable, and collaborative testing environment for security teams.
+CyberStrikeAI is an **AI-native security testing platform** built in Go. It integrates 100+ security tools, an intelligent orchestration engine, role-based testing with predefined security roles, a skills system with specialized testing skills, and comprehensive lifecycle management capabilities. Through native MCP protocol and AI agents, it enables end-to-end automation from conversational commands to vulnerability discovery, attack-chain analysis, knowledge retrieval, and result visualization—delivering an auditable, traceable, and collaborative testing environment for security teams.
 
 
 ## Interface & Integration Preview
@@ -500,9 +500,6 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history and all changes.
 - **2025-12-25** – Vulnerability management and conversation grouping features
 - **2025-12-20** – Knowledge base with vector search and hybrid retrieval
 
-## Star History
-
-![Star History Chart](https://api.star-history.com/svg?repos=Ed1s0nZ/CyberStrikeAI&type=date&legend=top-left)
 
 
 ## 404Starlink 
