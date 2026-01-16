@@ -20,43 +20,43 @@ CyberStrikeAI is an **AI-native security testing platform** built in Go. It inte
 <tr>
 <td width="33.33%" align="center">
 <strong>Web Console</strong><br/>
-<img src="./img/效果.png" alt="Web Console" width="100%">
+<img src="./images/web-console.png" alt="Web Console" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>Attack Chain Visualization</strong><br/>
-<img src="./img/攻击链.png" alt="Attack Chain" width="100%">
+<img src="./images/attack-chain.png" alt="Attack Chain" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>Task Management</strong><br/>
-<img src="./img/任务.png" alt="Task Management" width="100%">
+<img src="./images/task-management.png" alt="Task Management" width="100%">
 </td>
 </tr>
 <tr>
 <td width="33.33%" align="center">
 <strong>Vulnerability Management</strong><br/>
-<img src="./img/漏洞管理.png" alt="Vulnerability Management" width="100%">
+<img src="./images/vulnerability-management.png" alt="Vulnerability Management" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>MCP Management</strong><br/>
-<img src="./img/MCP管理.png" alt="MCP management" width="100%">
+<img src="./images/mcp-management.png" alt="MCP management" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>MCP stdio Mode</strong><br/>
-<img src="./img/mcp-stdio2.png" alt="MCP stdio mode" width="100%">
+<img src="./images/mcp-stdio2.png" alt="MCP stdio mode" width="100%">
 </td>
 </tr>
 <tr>
 <td width="33.33%" align="center">
 <strong>Knowledge Base</strong><br/>
-<img src="./img/知识.png" alt="Knowledge Base" width="100%">
+<img src="./images/knowledge-base.png" alt="Knowledge Base" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>Skills Management</strong><br/>
-<img src="./img/skills.png" alt="Skills Management" width="100%">
+<img src="./images/skills.png" alt="Skills Management" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>Role Management</strong><br/>
-<img src="./img/角色管理.png" alt="Role Management" width="100%">
+<img src="./images/role-management.png" alt="Role Management" width="100%">
 </td>
 </tr>
 </table>
@@ -464,7 +464,7 @@ CyberStrikeAI/
 ├── tools/               # YAML tool recipes (100+ examples provided)
 ├── roles/               # Role configurations (12+ predefined security testing roles)
 ├── skills/              # Skills directory (20+ predefined security testing skills)
-├── img/                 # Docs screenshots & diagrams
+├── images/              # Docs screenshots & diagrams
 ├── config.yaml          # Runtime configuration
 ├── run.sh               # Convenience launcher
 └── README*.md
@@ -506,14 +506,14 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history and all changes.
 
 ## 404Starlink 
 
-<img src="./img/404StarLinkLogo.png" width="30%">
+<img src="./images/404StarLinkLogo.png" width="30%">
 
 CyberStrikeAI has joined [404Starlink](https://github.com/knownsec/404StarLink)
 
 ## TCH Top-Ranked Intelligent Pentest Project  
 <div align="left">
   <a href="https://zc.tencent.com/competition/competitionHackathon?code=cha004" target="_blank">
-    <img src="./img/tch.png" alt="TCH Top-Ranked Intelligent Pentest Project" width="30%">
+    <img src="./images/tch.png" alt="TCH Top-Ranked Intelligent Pentest Project" width="30%">
   </a>
 </div>
 

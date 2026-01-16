@@ -19,43 +19,43 @@ CyberStrikeAI 是一款 **AI 原生安全测试平台**，基于 Go 构建，集
 <tr>
 <td width="33.33%" align="center">
 <strong>Web 控制台</strong><br/>
-<img src="./img/效果.png" alt="Web 控制台" width="100%">
+<img src="./images/web-console.png" alt="Web 控制台" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>攻击链可视化</strong><br/>
-<img src="./img/攻击链.png" alt="攻击链" width="100%">
+<img src="./images/attack-chain.png" alt="攻击链" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>任务管理</strong><br/>
-<img src="./img/任务.png" alt="任务管理" width="100%">
+<img src="./images/task-management.png" alt="任务管理" width="100%">
 </td>
 </tr>
 <tr>
 <td width="33.33%" align="center">
 <strong>漏洞管理</strong><br/>
-<img src="./img/漏洞管理.png" alt="漏洞管理" width="100%">
+<img src="./images/vulnerability-management.png" alt="漏洞管理" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>MCP 管理</strong><br/>
-<img src="./img/MCP管理.png" alt="MCP 管理" width="100%">
+<img src="./images/mcp-management.png" alt="MCP 管理" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>MCP stdio 模式</strong><br/>
-<img src="./img/mcp-stdio2.png" alt="MCP stdio 模式" width="100%">
+<img src="./images/mcp-stdio2.png" alt="MCP stdio 模式" width="100%">
 </td>
 </tr>
 <tr>
 <td width="33.33%" align="center">
 <strong>知识库</strong><br/>
-<img src="./img/知识.png" alt="知识库" width="100%">
+<img src="./images/knowledge-base.png" alt="知识库" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>Skills 管理</strong><br/>
-<img src="./img/skills.png" alt="Skills 管理" width="100%">
+<img src="./images/skills.png" alt="Skills 管理" width="100%">
 </td>
 <td width="33.33%" align="center">
 <strong>角色管理</strong><br/>
-<img src="./img/角色管理.png" alt="角色管理" width="100%">
+<img src="./images/role-management.png" alt="角色管理" width="100%">
 </td>
 </tr>
 </table>
@@ -463,7 +463,7 @@ CyberStrikeAI/
 ├── tools/               # YAML 工具目录（含 100+ 示例）
 ├── roles/               # 角色配置文件目录（含 12+ 预设安全测试角色）
 ├── skills/              # Skills 目录（含 20+ 预设安全测试技能）
-├── img/                 # 文档配图
+├── images/              # 文档配图
 ├── config.yaml          # 运行配置
 ├── run.sh               # 启动脚本
 └── README*.md
@@ -503,14 +503,14 @@ CyberStrikeAI/
 
 
 ## 404星链计划 
-<img src="./img/404StarLinkLogo.png" width="30%">
+<img src="./images/404StarLinkLogo.png" width="30%">
 
 CyberStrikeAI 现已加入 [404星链计划](https://github.com/knownsec/404StarLink)
 
 ## TCH Top-Ranked Intelligent Pentest Project  
 <div align="left">
   <a href="https://zc.tencent.com/competition/competitionHackathon?code=cha004" target="_blank">
-    <img src="./img/tch.png" alt="TCH Top-Ranked Intelligent Pentest Project" width="30%">
+    <img src="./images/tch.png" alt="TCH Top-Ranked Intelligent Pentest Project" width="30%">
   </a>
 </div>
 
