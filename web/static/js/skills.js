@@ -611,10 +611,6 @@ function renderSkillsMonitor() {
                 <div class="monitor-stat-label">成功率</div>
                 <div class="monitor-stat-value">${successRate}%</div>
             </div>
-            <div class="monitor-stat-card">
-                <div class="monitor-stat-label">Skills目录</div>
-                <div class="monitor-stat-value" style="font-size: 0.875rem;">${escapeHtml(skillsStats.skillsDir || '-')}</div>
-            </div>
         `;
     }
 
