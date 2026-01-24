@@ -835,7 +835,26 @@ function addTimelineItem(timeline, type, options) {
     item.id = itemId;
     item.className = `timeline-item timeline-item-${type}`;
     
-    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // 使用传入的createdAt时间，如果没有则使用当前时间（向后兼容）
+    let eventTime;
+    if (options.createdAt) {
+        // 处理字符串或Date对象
+        if (typeof options.createdAt === 'string') {
+            eventTime = new Date(options.createdAt);
+        } else if (options.createdAt instanceof Date) {
+            eventTime = options.createdAt;
+        } else {
+            eventTime = new Date(options.createdAt);
+        }
+        // 如果解析失败，使用当前时间
+        if (isNaN(eventTime.getTime())) {
+            eventTime = new Date();
+        }
+    } else {
+        eventTime = new Date();
+    }
+    
+    const time = eventTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     
     let content = `
         <div class="timeline-item-header">

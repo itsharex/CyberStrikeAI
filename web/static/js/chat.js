@@ -1260,7 +1260,8 @@ function renderProcessDetails(messageId, processDetails) {
         addTimelineItem(timeline, eventType, {
             title: itemTitle,
             message: detail.message || '',
-            data: data
+            data: data,
+            createdAt: detail.createdAt // 传递实际的事件创建时间
         });
     });
     
@@ -1978,6 +1979,16 @@ async function deleteConversation(conversationId, skipConfirm = false) {
             document.getElementById('chat-messages').innerHTML = '';
             addMessage('assistant', '系统已就绪。请输入您的测试需求，系统将自动执行相应的安全测试。');
             addAttackChainButton(null);
+        }
+        
+        // 更新缓存 - 立即删除，确保后续加载时能正确识别
+        delete conversationGroupMappingCache[conversationId];
+        // 同时从待保留映射中移除
+        delete pendingGroupMappings[conversationId];
+        
+        // 如果当前在分组详情页面，重新加载分组对话
+        if (currentGroupId) {
+            await loadGroupConversations(currentGroupId);
         }
         
         // 刷新对话列表
