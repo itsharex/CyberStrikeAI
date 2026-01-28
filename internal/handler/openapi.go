@@ -1309,7 +1309,7 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 			},
 			"/api/conversations/{id}/results": map[string]interface{}{
 				"get": map[string]interface{}{
-					"tags":        []string{"结果查询"},
+					"tags":        []string{"对话管理"},
 					"summary":     "获取对话结果",
 					"description": "获取指定对话的执行结果，包括消息、漏洞信息和执行结果",
 					"operationId": "getConversationResults",
