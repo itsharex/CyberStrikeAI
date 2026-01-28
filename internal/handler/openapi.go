@@ -13,21 +13,21 @@ import (
 
 // OpenAPIHandler OpenAPI处理器
 type OpenAPIHandler struct {
-	db              *database.DB
-	logger          *zap.Logger
-	resultStorage   storage.ResultStorage
+	db               *database.DB
+	logger           *zap.Logger
+	resultStorage    storage.ResultStorage
 	conversationHdlr *ConversationHandler
-	agentHdlr       *AgentHandler
+	agentHdlr        *AgentHandler
 }
 
 // NewOpenAPIHandler 创建新的OpenAPI处理器
 func NewOpenAPIHandler(db *database.DB, logger *zap.Logger, resultStorage storage.ResultStorage, conversationHdlr *ConversationHandler, agentHdlr *AgentHandler) *OpenAPIHandler {
 	return &OpenAPIHandler{
-		db:              db,
-		logger:          logger,
-		resultStorage:   resultStorage,
+		db:               db,
+		logger:           logger,
+		resultStorage:    resultStorage,
 		conversationHdlr: conversationHdlr,
-		agentHdlr:       agentHdlr,
+		agentHdlr:        agentHdlr,
 	}
 }
 
@@ -487,7 +487,7 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 					},
 				},
 			},
-			"/api/agent-loop": map[string]interface{}{
+			"/api/agent-loop/stream": map[string]interface{}{
 				"post": map[string]interface{}{
 					"tags":        []string{"对话交互"},
 					"summary":     "发送消息并获取AI回复（核心端点）",
@@ -571,7 +571,6 @@ func (h *OpenAPIHandler) GetOpenAPISpec(c *gin.Context) {
 
 	c.JSON(http.StatusOK, spec)
 }
-
 
 // GetConversationResults 获取对话结果（OpenAPI端点）
 // 注意：创建对话和获取对话详情直接使用标准的 /api/conversations 端点

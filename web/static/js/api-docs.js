@@ -224,7 +224,7 @@ function renderParameters(endpoint) {
     if (params.length === 0) return '';
     
     const rows = params.map(param => {
-        const required = param.required ? '<span class="api-param-required">必需</span>' : '<span style="color: var(--text-muted);">可选</span>';
+            const required = param.required ? '<span class="api-param-required">必需</span>' : '<span class="api-param-optional">可选</span>';
         return `
             <tr>
                 <td><span class="api-param-name">${param.name}</span></td>
@@ -238,19 +238,21 @@ function renderParameters(endpoint) {
     return `
         <div class="api-section">
             <div class="api-section-title">参数</div>
-            <table class="api-params-table">
-                <thead>
-                    <tr>
-                        <th>参数名</th>
-                        <th>类型</th>
-                        <th>描述</th>
-                        <th>必需</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows}
-                </tbody>
-            </table>
+            <div class="api-table-wrapper">
+                <table class="api-params-table">
+                    <thead>
+                        <tr>
+                            <th>参数名</th>
+                            <th>类型</th>
+                            <th>描述</th>
+                            <th>必需</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
@@ -279,7 +281,7 @@ function renderRequestBody(endpoint) {
             const prop = schema.properties[key];
             const required = requiredFields.includes(key) 
                 ? '<span class="api-param-required">必需</span>' 
-                : '<span style="color: var(--text-muted);">可选</span>';
+                : '<span class="api-param-optional">可选</span>';
             
             // 处理嵌套类型
             let typeDisplay = prop.type || 'object';
@@ -308,20 +310,22 @@ function renderRequestBody(endpoint) {
         
         if (rows) {
             paramsTable = `
-                <table class="api-params-table" style="margin-top: 12px;">
-                    <thead>
-                        <tr>
-                            <th>参数名</th>
-                            <th>类型</th>
-                            <th>描述</th>
-                            <th>必需</th>
-                            <th>示例</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
+                <div class="api-table-wrapper" style="margin-top: 12px;">
+                    <table class="api-params-table">
+                        <thead>
+                            <tr>
+                                <th>参数名</th>
+                                <th>类型</th>
+                                <th>描述</th>
+                                <th>必需</th>
+                                <th>示例</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
             `;
         }
     }
