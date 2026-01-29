@@ -690,6 +690,44 @@
             background: var(--bg-secondary);
         }
         
+        /* 复制curl按钮 - 黄色主题 */
+        .api-test-btn.copy-curl {
+            background: #ffc107;
+            color: white;
+            border: 1px solid #ffb300;
+        }
+        
+        .api-test-btn.copy-curl:hover {
+            background: #ffb300;
+            border-color: #ffa000;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+        }
+        
+        .api-test-btn.copy-curl:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 4px rgba(255, 193, 7, 0.2);
+        }
+        
+        /* 清除结果按钮 - 红色/橙色主题 */
+        .api-test-btn.clear-result {
+            background: #ff6b6b;
+            color: white;
+            border: 1px solid #ff5252;
+        }
+        
+        .api-test-btn.clear-result:hover {
+            background: #ff5252;
+            border-color: #ff4444;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+        }
+        
+        .api-test-btn.clear-result:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 4px rgba(255, 107, 107, 0.2);
+        }
+        
         .api-test-result {
             margin-top: 20px;
             padding: 16px;
