@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -368,6 +369,7 @@ func (s *Server) handleListTools(msg *Message) *Message {
 		tools = append(tools, tool)
 	}
 	s.mu.RUnlock()
+	s.logger.Info("tools/list 请求", zap.Int("返回工具数", len(tools)))
 
 	response := ListToolsResponse{Tools: tools}
 	result, _ := json.Marshal(response)
@@ -1167,10 +1169,11 @@ func (s *Server) RegisterResource(resource *Resource) {
 }
 
 // HandleStdio 处理标准输入输出（用于 stdio 传输模式）
-// MCP 协议使用换行分隔的 JSON-RPC 消息
+// MCP 协议使用换行分隔的 JSON-RPC 消息；管道下需每次写入后 Flush，否则客户端会读不到响应
 func (s *Server) HandleStdio() error {
 	decoder := json.NewDecoder(os.Stdin)
-	encoder := json.NewEncoder(os.Stdout)
+	stdout := bufio.NewWriter(os.Stdout)
+	encoder := json.NewEncoder(stdout)
 	// 注意：不设置缩进，MCP 协议期望紧凑的 JSON 格式
 
 	for {
@@ -1191,6 +1194,9 @@ func (s *Server) HandleStdio() error {
 			if err := encoder.Encode(errorMsg); err != nil {
 				return fmt.Errorf("发送错误响应失败: %w", err)
 			}
+			if err := stdout.Flush(); err != nil {
+				return fmt.Errorf("刷新 stdout 失败: %w", err)
+			}
 			continue
 		}
 
@@ -1205,6 +1211,9 @@ func (s *Server) HandleStdio() error {
 		// 发送响应
 		if err := encoder.Encode(response); err != nil {
 			return fmt.Errorf("发送响应失败: %w", err)
+		}
+		if err := stdout.Flush(); err != nil {
+			return fmt.Errorf("刷新 stdout 失败: %w", err)
 		}
 	}
 
