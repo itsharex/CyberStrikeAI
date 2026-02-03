@@ -369,7 +369,7 @@ func (s *Server) handleListTools(msg *Message) *Message {
 		tools = append(tools, tool)
 	}
 	s.mu.RUnlock()
-	s.logger.Info("tools/list 请求", zap.Int("返回工具数", len(tools)))
+	s.logger.Debug("tools/list 请求", zap.Int("返回工具数", len(tools)))
 
 	response := ListToolsResponse{Tools: tools}
 	result, _ := json.Marshal(response)
