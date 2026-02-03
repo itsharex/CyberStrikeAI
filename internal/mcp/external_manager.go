@@ -196,9 +196,13 @@ func (m *ExternalMCPManager) StartClient(name string) error {
 			m.mu.Lock()
 			delete(m.errors, name)
 			m.mu.Unlock()
-			// 延迟再刷新工具数量，避免 SSE/Streamable 连接尚未就绪时立即请求导致 EOF（如值得买等远端）
-			time.Sleep(2 * time.Second)
+			// 立即刷新工具数量（HTTP/stdio 等可马上拿到）
 			m.triggerToolCountRefresh()
+			// 2 秒后再刷新一次，覆盖 SSE/Streamable 等需稍等就绪的远端
+			go func() {
+				time.Sleep(2 * time.Second)
+				m.triggerToolCountRefresh()
+			}()
 		}
 	}()
 

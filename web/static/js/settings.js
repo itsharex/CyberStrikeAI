@@ -974,15 +974,17 @@ async function changePassword() {
 
 let currentEditingMCPName = null;
 
-// 加载外部MCP列表
+// 拉取外部MCP列表数据（供轮询使用，返回 { servers, stats }）
+async function fetchExternalMCPs() {
+    const response = await apiFetch('/api/external-mcp');
+    if (!response.ok) throw new Error('获取外部MCP列表失败');
+    return response.json();
+}
+
+// 加载外部MCP列表并渲染
 async function loadExternalMCPs() {
     try {
-        const response = await apiFetch('/api/external-mcp');
-        if (!response.ok) {
-            throw new Error('获取外部MCP列表失败');
-        }
-        
-        const data = await response.json();
+        const data = await fetchExternalMCPs();
         renderExternalMCPList(data.servers || {});
         renderExternalMCPStats(data.stats || {});
     } catch (error) {
@@ -994,18 +996,27 @@ async function loadExternalMCPs() {
     }
 }
 
-// 延迟刷新外部MCP列表（用于在保存/连接后拉取后端异步更新的工具数量）
-// 可选传入单次延迟毫秒数；不传则执行两次：2.5s 与 5s（覆盖启动后后端异步更新较慢的情况）
-function scheduleExternalMCPToolCountRefresh(delayMs) {
-    const delays = delayMs != null ? [delayMs] : [2500, 5000];
-    delays.forEach((d) => {
-        setTimeout(async () => {
-            await loadExternalMCPs();
-            if (typeof window !== 'undefined' && typeof window.refreshMentionTools === 'function') {
-                window.refreshMentionTools();
+// 轮询列表直到指定 MCP 的工具数量已更新（每秒拉一次，拿到即停，无固定延迟）
+// name 为 null 时仅按 maxAttempts 次数轮询，不判断 tool_count
+async function pollExternalMCPToolCount(name, maxAttempts = 10) {
+    const pollIntervalMs = 1000;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise(r => setTimeout(r, pollIntervalMs));
+        try {
+            const data = await fetchExternalMCPs();
+            renderExternalMCPList(data.servers || {});
+            renderExternalMCPStats(data.stats || {});
+            if (name != null) {
+                const server = data.servers && data.servers[name];
+                if (server && server.tool_count > 0) break;
             }
-        }, d);
-    });
+        } catch (e) {
+            console.warn('轮询工具数量失败:', e);
+        }
+    }
+    if (typeof window !== 'undefined' && typeof window.refreshMentionTools === 'function') {
+        window.refreshMentionTools();
+    }
 }
 
 // 渲染外部MCP列表
@@ -1364,12 +1375,11 @@ async function saveExternalMCP() {
         
         closeExternalMCPModal();
         await loadExternalMCPs();
-        // 刷新对话界面的工具列表，使新添加的MCP工具立即可用
         if (typeof window !== 'undefined' && typeof window.refreshMentionTools === 'function') {
             window.refreshMentionTools();
         }
-        // 后端在连接成功约 2 秒后才更新工具数量，延迟再拉取一次以显示正确工具数
-        scheduleExternalMCPToolCountRefresh();
+        // 轮询几次以拉取后端异步更新的工具数量（无固定延迟，拿到即停）
+        pollExternalMCPToolCount(null, 5);
         alert('保存成功');
     } catch (error) {
         console.error('保存外部MCP失败:', error);
@@ -1443,14 +1453,12 @@ async function toggleExternalMCP(name, currentStatus) {
                     const status = statusData.status || 'disconnected';
                     
                     if (status === 'connected') {
-                        // 已经连接，立即刷新
                         await loadExternalMCPs();
-                        // 刷新对话界面的工具列表
                         if (typeof window !== 'undefined' && typeof window.refreshMentionTools === 'function') {
                             window.refreshMentionTools();
                         }
-                        // 后端约 2 秒后才更新工具数量，延迟再拉取一次以显示正确工具数
-                        scheduleExternalMCPToolCountRefresh();
+                        // 轮询直到该 MCP 工具数量已更新（每秒拉一次，无固定延迟）
+                        pollExternalMCPToolCount(name, 10);
                         return;
                     }
                 }
@@ -1508,14 +1516,12 @@ async function pollExternalMCPStatus(name, maxAttempts = 30) {
                 const button = document.getElementById(buttonId);
                 
                 if (status === 'connected') {
-                    // 连接成功，刷新列表
                     await loadExternalMCPs();
-                    // 刷新对话界面的工具列表
                     if (typeof window !== 'undefined' && typeof window.refreshMentionTools === 'function') {
                         window.refreshMentionTools();
                     }
-                    // 后端约 2 秒后才更新工具数量，延迟再拉取一次以显示正确工具数
-                    scheduleExternalMCPToolCountRefresh();
+                    // 轮询直到该 MCP 工具数量已更新（每秒拉一次，无固定延迟）
+                    pollExternalMCPToolCount(name, 10);
                     return;
                 } else if (status === 'error' || status === 'disconnected') {
                     // 连接失败，刷新列表并显示错误
