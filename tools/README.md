@@ -407,7 +407,7 @@ go run cmd/test-config/main.go
 
 ### Q: 参数顺序如何控制？
 
-A: 使用 `position` 字段控制位置参数的顺序。标志参数会按照在 `parameters` 列表中的顺序添加。`additional_args` 会追加到命令末尾。
+A: 使用 `position` 字段控制位置参数的顺序。**位置 0 的参数（如 gobuster 的 `dir` 子命令）会紧跟在命令名后、所有标志参数之前**，以便兼容需要“子命令 + 选项”形式的 CLI。其余标志参数按在 `parameters` 列表中的顺序添加，再按 position 1、2… 添加其余位置参数。`additional_args` 会追加到命令末尾。
 
 ## 工具配置模板
 
