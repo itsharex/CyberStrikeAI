@@ -213,107 +213,88 @@
                             </div>
                         </div>
                         <div class="dashboard-content">
-                            <div class="dashboard-cards" id="dashboard-cards">
-                                <div class="dashboard-card dashboard-card-tasks" onclick="switchPage('tasks')">
-                                    <div class="dashboard-card-glow"></div>
-                                    <div class="dashboard-card-icon">
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
-                                    </div>
-                                    <div class="dashboard-card-body">
-                                        <div class="dashboard-card-value" id="dashboard-running-tasks">-</div>
-                                        <div class="dashboard-card-label">运行中任务</div>
-                                        <div class="dashboard-card-hint">点击查看任务管理</div>
-                                    </div>
+                            <!-- 第一行：核心 KPI（仪表盘最佳实践：关键指标置顶） -->
+                            <div class="dashboard-kpi-row" id="dashboard-cards">
+                                <div class="dashboard-kpi-card" onclick="switchPage('tasks')" title="点击查看任务管理">
+                                    <div class="dashboard-kpi-value" id="dashboard-running-tasks">-</div>
+                                    <div class="dashboard-kpi-label">运行中任务</div>
                                 </div>
-                                <div class="dashboard-card dashboard-card-vulns" onclick="switchPage('vulnerabilities')">
-                                    <div class="dashboard-card-glow"></div>
-                                    <div class="dashboard-card-icon">
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                                    </div>
-                                    <div class="dashboard-card-body">
-                                        <div class="dashboard-card-value" id="dashboard-vuln-total">-</div>
-                                        <div class="dashboard-card-label">漏洞总数</div>
-                                        <div class="dashboard-card-hint">点击查看漏洞管理</div>
-                                    </div>
+                                <div class="dashboard-kpi-card" onclick="switchPage('vulnerabilities')" title="点击查看漏洞管理">
+                                    <div class="dashboard-kpi-value" id="dashboard-vuln-total">-</div>
+                                    <div class="dashboard-kpi-label">漏洞总数</div>
                                 </div>
-                                <div class="dashboard-card dashboard-card-chat" onclick="switchPage('chat')">
-                                    <div class="dashboard-card-glow"></div>
-                                    <div class="dashboard-card-icon">
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                                    </div>
-                                    <div class="dashboard-card-body">
-                                        <div class="dashboard-card-cta">开始对话</div>
-                                        <div class="dashboard-card-desc">与 AI 进行安全测试</div>
-                                        <div class="dashboard-card-hint">立即开始</div>
-                                    </div>
+                                <div class="dashboard-kpi-card" onclick="switchPage('mcp-monitor')" title="点击查看 MCP 监控">
+                                    <div class="dashboard-kpi-value" id="dashboard-kpi-tools-calls">-</div>
+                                    <div class="dashboard-kpi-label">工具调用次数</div>
+                                </div>
+                                <div class="dashboard-kpi-card" onclick="switchPage('mcp-monitor')" title="点击查看 MCP 监控">
+                                    <div class="dashboard-kpi-value" id="dashboard-kpi-success-rate">-</div>
+                                    <div class="dashboard-kpi-label">工具执行成功率</div>
                                 </div>
                             </div>
-                            <div class="dashboard-section dashboard-section-chart">
-                                <h3 class="dashboard-section-title"><span class="dashboard-section-dot"></span>漏洞严重程度分布</h3>
-                                <div class="dashboard-chart-wrap">
-                                    <div class="dashboard-stacked-bar" id="dashboard-stacked-bar">
-                                        <span class="dashboard-bar-seg seg-critical" id="dashboard-bar-critical" style="width: 0%"></span>
-                                        <span class="dashboard-bar-seg seg-high" id="dashboard-bar-high" style="width: 0%"></span>
-                                        <span class="dashboard-bar-seg seg-medium" id="dashboard-bar-medium" style="width: 0%"></span>
-                                        <span class="dashboard-bar-seg seg-low" id="dashboard-bar-low" style="width: 0%"></span>
-                                        <span class="dashboard-bar-seg seg-info" id="dashboard-bar-info" style="width: 0%"></span>
-                                    </div>
-                                    <div class="dashboard-legend" id="dashboard-vuln-bars">
-                                        <div class="dashboard-legend-item"><span class="dashboard-legend-dot critical"></span><span class="dashboard-legend-label">严重</span><span class="dashboard-legend-value" id="dashboard-severity-critical">0</span></div>
-                                        <div class="dashboard-legend-item"><span class="dashboard-legend-dot high"></span><span class="dashboard-legend-label">高危</span><span class="dashboard-legend-value" id="dashboard-severity-high">0</span></div>
-                                        <div class="dashboard-legend-item"><span class="dashboard-legend-dot medium"></span><span class="dashboard-legend-label">中危</span><span class="dashboard-legend-value" id="dashboard-severity-medium">0</span></div>
-                                        <div class="dashboard-legend-item"><span class="dashboard-legend-dot low"></span><span class="dashboard-legend-label">低危</span><span class="dashboard-legend-value" id="dashboard-severity-low">0</span></div>
-                                        <div class="dashboard-legend-item"><span class="dashboard-legend-dot info"></span><span class="dashboard-legend-label">信息</span><span class="dashboard-legend-value" id="dashboard-severity-info">0</span></div>
-                                    </div>
+                            <!-- 两列主内容区 -->
+                            <div class="dashboard-grid">
+                                <div class="dashboard-main">
+                                    <section class="dashboard-section dashboard-section-chart">
+                                        <h3 class="dashboard-section-title">漏洞严重程度分布</h3>
+                                        <div class="dashboard-chart-wrap">
+                                            <div class="dashboard-stacked-bar" id="dashboard-stacked-bar">
+                                                <span class="dashboard-bar-seg seg-critical" id="dashboard-bar-critical" style="width: 0%"></span>
+                                                <span class="dashboard-bar-seg seg-high" id="dashboard-bar-high" style="width: 0%"></span>
+                                                <span class="dashboard-bar-seg seg-medium" id="dashboard-bar-medium" style="width: 0%"></span>
+                                                <span class="dashboard-bar-seg seg-low" id="dashboard-bar-low" style="width: 0%"></span>
+                                                <span class="dashboard-bar-seg seg-info" id="dashboard-bar-info" style="width: 0%"></span>
+                                            </div>
+                                            <div class="dashboard-legend" id="dashboard-vuln-bars">
+                                                <div class="dashboard-legend-item"><span class="dashboard-legend-dot critical"></span><span class="dashboard-legend-label">严重</span><span class="dashboard-legend-value" id="dashboard-severity-critical">0</span></div>
+                                                <div class="dashboard-legend-item"><span class="dashboard-legend-dot high"></span><span class="dashboard-legend-label">高危</span><span class="dashboard-legend-value" id="dashboard-severity-high">0</span></div>
+                                                <div class="dashboard-legend-item"><span class="dashboard-legend-dot medium"></span><span class="dashboard-legend-label">中危</span><span class="dashboard-legend-value" id="dashboard-severity-medium">0</span></div>
+                                                <div class="dashboard-legend-item"><span class="dashboard-legend-dot low"></span><span class="dashboard-legend-label">低危</span><span class="dashboard-legend-value" id="dashboard-severity-low">0</span></div>
+                                                <div class="dashboard-legend-item"><span class="dashboard-legend-dot info"></span><span class="dashboard-legend-label">信息</span><span class="dashboard-legend-value" id="dashboard-severity-info">0</span></div>
+                                            </div>
+                                        </div>
+                                    </section>
+                                    <section class="dashboard-section dashboard-section-overview">
+                                        <h3 class="dashboard-section-title">运行概览</h3>
+                                        <div class="dashboard-overview-list">
+                                            <div class="dashboard-overview-item" onclick="switchPage('tasks')">
+                                                <span class="dashboard-overview-label">批量任务队列</span>
+                                                <span class="dashboard-overview-value"><span id="dashboard-batch-pending">-</span> 待执行 / <span id="dashboard-batch-running">-</span> 执行中 / <span id="dashboard-batch-done">-</span> 已完成</span>
+                                            </div>
+                                            <div class="dashboard-overview-item" onclick="switchPage('mcp-monitor')">
+                                                <span class="dashboard-overview-label">工具调用</span>
+                                                <span class="dashboard-overview-value"><span id="dashboard-tools-count">-</span> 个工具，共 <span id="dashboard-tools-calls">-</span> 次</span>
+                                            </div>
+                                            <div class="dashboard-overview-item" onclick="switchPage('skills-monitor')">
+                                                <span class="dashboard-overview-label">Skills</span>
+                                                <span class="dashboard-overview-value"><span id="dashboard-skills-count">-</span> 个 Skill，共 <span id="dashboard-skills-calls">-</span> 次调用</span>
+                                            </div>
+                                        </div>
+                                    </section>
+                                    <section class="dashboard-section dashboard-section-quick dashboard-quick-inline">
+                                        <h3 class="dashboard-section-title">快捷入口</h3>
+                                        <div class="dashboard-quick-links dashboard-quick-links-row">
+                                            <a class="dashboard-quick-link" onclick="switchPage('tasks')"><span class="dashboard-quick-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></span><span>任务管理</span></a>
+                                            <a class="dashboard-quick-link" onclick="switchPage('vulnerabilities')"><span class="dashboard-quick-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span><span>漏洞管理</span></a>
+                                            <a class="dashboard-quick-link" onclick="switchPage('chat')"><span class="dashboard-quick-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span><span>对话</span></a>
+                                            <a class="dashboard-quick-link" onclick="switchPage('mcp-monitor')"><span class="dashboard-quick-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg></span><span>MCP 监控</span></a>
+                                            <a class="dashboard-quick-link" onclick="switchPage('skills-monitor')"><span class="dashboard-quick-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span><span>Skills 监控</span></a>
+                                        </div>
+                                    </section>
                                 </div>
-                            </div>
-                            <div class="dashboard-section dashboard-section-overview">
-                                <h3 class="dashboard-section-title"><span class="dashboard-section-dot"></span>运行概览</h3>
-                                <div class="dashboard-overview-grid">
-                                    <div class="dashboard-overview-item" onclick="switchPage('tasks')">
-                                        <span class="dashboard-overview-label">批量任务队列</span>
-                                        <span class="dashboard-overview-value"><span id="dashboard-batch-pending">-</span> 待执行 / <span id="dashboard-batch-running">-</span> 执行中 / <span id="dashboard-batch-done">-</span> 已完成</span>
-                                    </div>
-                                    <div class="dashboard-overview-item" onclick="switchPage('mcp-monitor')">
-                                        <span class="dashboard-overview-label">工具调用</span>
-                                        <span class="dashboard-overview-value"><span id="dashboard-tools-count">-</span> 个工具，共 <span id="dashboard-tools-calls">-</span> 次调用</span>
-                                    </div>
-                                    <div class="dashboard-overview-item" onclick="switchPage('skills-monitor')">
-                                        <span class="dashboard-overview-label">Skills</span>
-                                        <span class="dashboard-overview-value"><span id="dashboard-skills-count">-</span> 个 Skill，共 <span id="dashboard-skills-calls">-</span> 次调用</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="dashboard-section">
-                                <h3 class="dashboard-section-title"><span class="dashboard-section-dot"></span>快捷入口</h3>
-                                <div class="dashboard-quick-links">
-                                    <a class="dashboard-quick-link" onclick="switchPage('tasks')">
-                                        <span class="dashboard-quick-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg></span>
-                                        <span>任务管理</span>
-                                    </a>
-                                    <a class="dashboard-quick-link" onclick="switchPage('vulnerabilities')">
-                                        <span class="dashboard-quick-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
-                                        <span>漏洞管理</span>
-                                    </a>
-                                    <a class="dashboard-quick-link" onclick="switchPage('chat')">
-                                        <span class="dashboard-quick-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
-                                        <span>对话</span>
-                                    </a>
-                                    <a class="dashboard-quick-link" onclick="switchPage('mcp-monitor')">
-                                        <span class="dashboard-quick-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg></span>
-                                        <span>MCP 监控</span>
-                                    </a>
-                                    <a class="dashboard-quick-link" onclick="switchPage('skills-monitor')">
-                                        <span class="dashboard-quick-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>
-                                        <span>Skills 监控</span>
-                                    </a>
+                                <div class="dashboard-side">
+                                    <section class="dashboard-section dashboard-section-tools">
+                                        <h3 class="dashboard-section-title">工具执行次数</h3>
+                                        <div class="dashboard-tools-chart-wrap">
+                                            <div class="dashboard-tools-chart-placeholder" id="dashboard-tools-pie-placeholder">暂无数据</div>
+                                            <div class="dashboard-tools-bar-chart" id="dashboard-tools-bar-chart"></div>
+                                        </div>
+                                    </section>
                                 </div>
                             </div>
                             <div class="dashboard-cta-block">
-                                <div class="dashboard-cta-inner">
-                                    <p class="dashboard-cta-text">准备好开始安全测试？</p>
-                                    <button class="dashboard-cta-btn" onclick="switchPage('chat')">前往对话 →</button>
-                                </div>
+                                <p class="dashboard-cta-text">准备好开始安全测试？</p>
+                                <button class="dashboard-cta-btn" onclick="switchPage('chat')">前往对话</button>
                             </div>
                         </div>
                     </div>

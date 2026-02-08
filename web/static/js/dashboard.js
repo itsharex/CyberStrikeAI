@@ -14,6 +14,12 @@ async function refreshDashboard() {
         if (barEl) barEl.style.width = '0%';
     });
     setDashboardOverviewPlaceholder('…');
+    setEl('dashboard-kpi-tools-calls', '…');
+    setEl('dashboard-kpi-success-rate', '…');
+    var chartPlaceholder = document.getElementById('dashboard-tools-pie-placeholder');
+    if (chartPlaceholder) { chartPlaceholder.style.display = 'block'; chartPlaceholder.textContent = '加载中…'; }
+    var barChartEl = document.getElementById('dashboard-tools-bar-chart');
+    if (barChartEl) { barChartEl.style.display = 'none'; barChartEl.innerHTML = ''; }
 
     if (typeof apiFetch === 'undefined') {
         if (runningEl) runningEl.textContent = '-';
@@ -75,20 +81,31 @@ async function refreshDashboard() {
             setEl('dashboard-batch-done', '-');
         }
 
-        // 工具调用：monitor/stats 为 { toolName: { TotalCalls, ... } }
+        // 工具调用：monitor/stats 为 { toolName: { totalCalls, successCalls, failedCalls, ... } }
         if (monitorRes && typeof monitorRes === 'object') {
             const names = Object.keys(monitorRes);
-            let totalCalls = 0;
+            let totalCalls = 0, totalSuccess = 0, totalFailed = 0;
             names.forEach(k => {
                 const v = monitorRes[k];
                 const n = v && (v.totalCalls ?? v.TotalCalls);
                 if (typeof n === 'number') totalCalls += n;
+                const s = v && (v.successCalls ?? v.SuccessCalls);
+                if (typeof s === 'number') totalSuccess += s;
+                const f = v && (v.failedCalls ?? v.FailedCalls);
+                if (typeof f === 'number') totalFailed += f;
             });
             setEl('dashboard-tools-count', String(names.length));
             setEl('dashboard-tools-calls', String(totalCalls));
+            setEl('dashboard-kpi-tools-calls', String(totalCalls));
+            var rateStr = totalCalls > 0 ? ((totalSuccess / totalCalls) * 100).toFixed(1) + '%' : '-';
+            setEl('dashboard-kpi-success-rate', rateStr);
+            renderDashboardToolsBar(monitorRes);
         } else {
             setEl('dashboard-tools-count', '-');
             setEl('dashboard-tools-calls', '-');
+            setEl('dashboard-kpi-tools-calls', '-');
+            setEl('dashboard-kpi-success-rate', '-');
+            renderDashboardToolsBar(null);
         }
 
         // Skills：{ total_skills, total_calls, ... }
@@ -104,6 +121,11 @@ async function refreshDashboard() {
         if (runningEl) runningEl.textContent = '-';
         if (vulnTotalEl) vulnTotalEl.textContent = '-';
         setDashboardOverviewPlaceholder('-');
+        setEl('dashboard-kpi-success-rate', '-');
+        setEl('dashboard-kpi-tools-calls', '-');
+        renderDashboardToolsBar(null);
+        var ph = document.getElementById('dashboard-tools-pie-placeholder');
+        if (ph) { ph.style.display = 'block'; ph.textContent = '暂无调用数据'; }
     }
 }
 
@@ -115,4 +137,60 @@ function setEl(id, text) {
 function setDashboardOverviewPlaceholder(t) {
     ['dashboard-batch-pending', 'dashboard-batch-running', 'dashboard-batch-done',
      'dashboard-tools-count', 'dashboard-tools-calls', 'dashboard-skills-count', 'dashboard-skills-calls'].forEach(id => setEl(id, t));
+}
+
+// Top 30 工具执行次数柱状图颜色（柔和、低饱和度）
+var DASHBOARD_BAR_COLORS = [
+    '#93c5fd', '#a78bfa', '#6ee7b7', '#fde047', '#fda4af',
+    '#7dd3fc', '#a5b4fc', '#5eead4', '#fdba74', '#e9d5ff'
+];
+
+function esc(s) {
+    if (typeof s !== 'string') return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function renderDashboardToolsBar(monitorRes) {
+    const placeholder = document.getElementById('dashboard-tools-pie-placeholder');
+    const barChartEl = document.getElementById('dashboard-tools-bar-chart');
+    if (!placeholder || !barChartEl) return;
+
+    if (!monitorRes || typeof monitorRes !== 'object') {
+        placeholder.style.display = 'block';
+        barChartEl.style.display = 'none';
+        barChartEl.innerHTML = '';
+        return;
+    }
+
+    const entries = Object.keys(monitorRes).map(function (k) {
+        const v = monitorRes[k];
+        const totalCalls = v && (v.totalCalls ?? v.TotalCalls);
+        return { name: k, totalCalls: typeof totalCalls === 'number' ? totalCalls : 0 };
+    }).filter(function (e) { return e.totalCalls > 0; })
+        .sort(function (a, b) { return b.totalCalls - a.totalCalls; })
+        .slice(0, 30);
+
+    if (entries.length === 0) {
+        placeholder.style.display = 'block';
+        barChartEl.style.display = 'none';
+        barChartEl.innerHTML = '';
+        return;
+    }
+
+    placeholder.style.display = 'none';
+    barChartEl.style.display = 'block';
+
+    const maxCalls = Math.max.apply(null, entries.map(function (e) { return e.totalCalls; }));
+    var html = '';
+    entries.forEach(function (e, i) {
+        var pct = maxCalls > 0 ? (e.totalCalls / maxCalls) * 100 : 0;
+        var label = e.name.length > 12 ? e.name.slice(0, 10) + '…' : e.name;
+        var color = DASHBOARD_BAR_COLORS[i % DASHBOARD_BAR_COLORS.length];
+        html += '<div class="dashboard-tools-bar-item">';
+        html += '<span class="dashboard-tools-bar-label" title="' + esc(e.name) + '">' + esc(label) + '</span>';
+        html += '<div class="dashboard-tools-bar-track"><div class="dashboard-tools-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+        html += '<span class="dashboard-tools-bar-value">' + e.totalCalls + '</span>';
+        html += '</div>';
+    });
+    barChartEl.innerHTML = html;
 }
