@@ -139,10 +139,14 @@ function setDashboardOverviewPlaceholder(t) {
      'dashboard-tools-count', 'dashboard-tools-calls', 'dashboard-skills-count', 'dashboard-skills-calls'].forEach(id => setEl(id, t));
 }
 
-// Top 30 工具执行次数柱状图颜色（柔和、低饱和度）
+// Top 30 工具执行次数柱状图颜色（30 色不重复，柔和、易区分）
 var DASHBOARD_BAR_COLORS = [
     '#93c5fd', '#a78bfa', '#6ee7b7', '#fde047', '#fda4af',
-    '#7dd3fc', '#a5b4fc', '#5eead4', '#fdba74', '#e9d5ff'
+    '#7dd3fc', '#a5b4fc', '#5eead4', '#fdba74', '#e9d5ff',
+    '#67e8f9', '#c4b5fd', '#86efac', '#fcd34d', '#f9a8d4',
+    '#bae6fd', '#c7d2fe', '#99f6e4', '#fed7aa', '#ddd6fe',
+    '#22d3ee', '#8b5cf6', '#4ade80', '#fbbf24', '#fb7185',
+    '#38bdf8', '#818cf8', '#2dd4bf', '#fb923c', '#e0e7ff'
 ];
 
 function esc(s) {

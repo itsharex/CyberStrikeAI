@@ -8183,11 +8183,12 @@ header {
     border-radius: 0 14px 14px 0;
 }
 
-.dashboard-bar-seg.seg-critical { background: linear-gradient(90deg, #fca5a5, #fecaca); }
-.dashboard-bar-seg.seg-high { background: linear-gradient(90deg, #fdba74, #fed7aa); }
-.dashboard-bar-seg.seg-medium { background: linear-gradient(90deg, #fde047, #fef08a); }
-.dashboard-bar-seg.seg-low { background: linear-gradient(90deg, #6ee7b7, #a7f3d0); }
-.dashboard-bar-seg.seg-info { background: linear-gradient(90deg, #cbd5e1, #e2e8f0); }
+/* 严重→信息：柔和连续色阶，红→橙→黄→绿→蓝，无灰沉感 */
+.dashboard-bar-seg.seg-critical { background: linear-gradient(90deg, #f87171, #fca5a5); }
+.dashboard-bar-seg.seg-high { background: linear-gradient(90deg, #fb923c, #fdba74); }
+.dashboard-bar-seg.seg-medium { background: linear-gradient(90deg, #facc15, #fde047); }
+.dashboard-bar-seg.seg-low { background: linear-gradient(90deg, #34d399, #6ee7b7); }
+.dashboard-bar-seg.seg-info { background: linear-gradient(90deg, #60a5fa, #93c5fd); }
 
 .dashboard-legend {
     display: flex;
@@ -8219,11 +8220,12 @@ header {
     box-shadow: 0 0 0 2px rgba(255,255,255,0.8);
 }
 
-.dashboard-legend-dot.critical { background: #dc2626; }
-.dashboard-legend-dot.high { background: #f97316; }
-.dashboard-legend-dot.medium { background: #eab308; }
-.dashboard-legend-dot.low { background: #10b981; }
-.dashboard-legend-dot.info { background: #6b7280; }
+/* 与条形图同色系，图例与条形视觉一致 */
+.dashboard-legend-dot.critical { background: #f87171; }
+.dashboard-legend-dot.high { background: #fb923c; }
+.dashboard-legend-dot.medium { background: #facc15; }
+.dashboard-legend-dot.low { background: #34d399; }
+.dashboard-legend-dot.info { background: #60a5fa; }
 
 .dashboard-legend-label {
     color: var(--text-secondary);
