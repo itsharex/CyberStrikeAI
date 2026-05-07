@@ -306,12 +306,13 @@ async function bootstrapApp() {
 
 // 通用工具函数
 function getStatusText(status) {
+    const s = (status && String(status).toLowerCase()) || '';
     if (typeof window.t !== 'function') {
-        const fallback = { pending: '等待中', running: '执行中', completed: '已完成', failed: '失败' };
-        return fallback[status] || status;
+        const fallback = { pending: '等待中', running: '执行中', completed: '已完成', failed: '失败', cancelled: '已终止' };
+        return fallback[s] || status;
     }
-    const keyMap = { pending: 'mcpDetailModal.statusPending', running: 'mcpDetailModal.statusRunning', completed: 'mcpDetailModal.statusCompleted', failed: 'mcpDetailModal.statusFailed' };
-    const key = keyMap[status];
+    const keyMap = { pending: 'mcpDetailModal.statusPending', running: 'mcpDetailModal.statusRunning', completed: 'mcpDetailModal.statusCompleted', failed: 'mcpDetailModal.statusFailed', cancelled: 'mcpDetailModal.statusCancelled' };
+    const key = keyMap[s];
     return key ? window.t(key) : status;
 }
 

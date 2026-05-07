@@ -3196,11 +3196,29 @@ header {
     border-color: rgba(220, 53, 69, 0.3);
 }
 
+.status-chip.status-cancelled {
+    background: rgba(108, 117, 125, 0.12);
+    color: var(--text-secondary, #6c757d);
+    border-color: rgba(108, 117, 125, 0.35);
+}
+
 .status-chip.status-pending,
 .status-chip.status-unknown {
     background: rgba(255, 193, 7, 0.12);
     color: #b8860b;
     border-color: rgba(255, 193, 7, 0.3);
+}
+
+.detail-abort-hint {
+    font-size: 0.875rem;
+    opacity: 0.88;
+    margin: 0 0 10px;
+    line-height: 1.45;
+}
+
+.detail-abort-section .btn-monitor-abort {
+    border-color: rgba(253, 126, 20, 0.55);
+    color: #fd7e14;
 }
 
 .detail-code-card {
@@ -5515,6 +5533,16 @@ header {
 .monitor-status-chip.failed {
     background: rgba(220, 53, 69, 0.12);
     color: var(--error-color);
+}
+
+.monitor-status-chip.cancelled {
+    background: rgba(108, 117, 125, 0.15);
+    color: var(--text-muted, #6c757d);
+}
+
+.monitor-execution-actions .btn-monitor-abort {
+    border-color: rgba(253, 126, 20, 0.55);
+    color: #fd7e14;
 }
 
 .monitor-execution-actions {

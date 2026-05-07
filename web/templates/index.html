@@ -1053,6 +1053,7 @@
                                                 <option value="completed" data-i18n="mcpMonitor.statusCompleted">已完成</option>
                                                 <option value="running" data-i18n="mcpMonitor.statusRunning">执行中</option>
                                                 <option value="failed" data-i18n="mcpMonitor.statusFailed">失败</option>
+                                                <option value="cancelled" data-i18n="mcpMonitor.statusCancelled">已终止</option>
                                             </select>
                                         </label>
                                     </div>
@@ -2449,6 +2450,13 @@
                         </div>
                     </div>
                 </div>
+                <div class="detail-section detail-abort-section" id="detail-abort-section" style="display: none;">
+                    <div class="detail-section-header">
+                        <h3 data-i18n="mcpDetailModal.abortTitle">运行控制</h3>
+                    </div>
+                    <p class="detail-abort-hint" data-i18n="mcpDetailModal.abortHint">仅中断当前工具调用；对话与多步任务会继续。</p>
+                    <button type="button" class="btn-secondary btn-monitor-abort" id="detail-abort-btn" onclick="abortMCPToolExecutionFromDetail()">终止工具</button>
+                </div>
                 <div class="detail-section">
                     <div class="detail-section-header">
                         <h3 data-i18n="mcpDetailModal.requestParams">请求参数</h3>
@@ -2484,6 +2492,49 @@
                     <div class="detail-code-card">
                         <pre id="detail-error" class="code-block error"></pre>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户中断并说明（继续迭代） -->
+    <div id="user-interrupt-modal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2 data-i18n="tasks.interruptModalTitle">中断当前步骤</h2>
+                <span class="modal-close" onclick="closeUserInterruptModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="detail-abort-hint" data-i18n="tasks.interruptModalHint">填写说明后将写入对话并由智能体继续迭代。</p>
+                <div class="form-group">
+                    <label for="user-interrupt-reason"><span data-i18n="tasks.interruptReasonLabel">中断说明</span></label>
+                    <textarea id="user-interrupt-reason" class="form-control" rows="4" data-i18n="tasks.interruptReasonPlaceholder" data-i18n-attr="placeholder" placeholder=""></textarea>
+                </div>
+                <div class="form-actions" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;">
+                    <button type="button" class="btn-secondary" onclick="closeUserInterruptModal()" data-i18n="tasks.interruptModalClose">关闭</button>
+                    <button type="button" class="btn-secondary btn-delete" onclick="submitUserInterruptHardCancel()" data-i18n="tasks.interruptHardStop">彻底停止</button>
+                    <button type="button" class="btn-primary" onclick="submitUserInterruptContinue()" data-i18n="tasks.interruptConfirmContinue">中断并继续</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP 工具终止：可填写给模型的说明 -->
+    <div id="mcp-tool-abort-modal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2 data-i18n="mcpDetailModal.abortNoteModalTitle">终止工具并补充说明</h2>
+                <span class="modal-close" onclick="closeMcpToolAbortModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="detail-abort-hint" data-i18n="mcpDetailModal.abortNoteModalHint">可选说明。</p>
+                <div class="form-group">
+                    <label for="mcp-tool-abort-note"><span data-i18n="mcpDetailModal.abortNoteLabel">终止说明（可选）</span></label>
+                    <textarea id="mcp-tool-abort-note" class="form-control" rows="4" data-i18n="mcpDetailModal.abortNotePlaceholder" data-i18n-attr="placeholder" placeholder=""></textarea>
+                </div>
+                <div class="form-actions" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;">
+                    <button type="button" class="btn-secondary" onclick="closeMcpToolAbortModal()" data-i18n="mcpDetailModal.abortNoteClose">取消</button>
+                    <button type="button" class="btn-primary" onclick="submitMcpToolAbortModal()" data-i18n="mcpDetailModal.abortNoteSubmit">提交终止</button>
                 </div>
             </div>
         </div>

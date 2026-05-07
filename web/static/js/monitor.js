@@ -1,4 +1,6 @@
 const progressTaskState = new Map();
+/** @type {{ progressId: string, conversationId: string } | null} */
+let userInterruptModalPending = null;
 let activeTaskInterval = null;
 const ACTIVE_TASK_REFRESH_INTERVAL = 10000; // 10秒检查一次
 const TASK_FINAL_STATUSES = new Set(['failed', 'timeout', 'cancelled', 'completed']);
@@ -410,6 +412,128 @@ async function requestCancel(conversationId) {
     return result;
 }
 
+/** 用户填写说明后中断当前步骤，由后端写入对话并继续同一条流式迭代 */
+async function requestCancelWithContinue(conversationId, reason) {
+    const response = await apiFetch('/api/agent-loop/cancel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            conversationId,
+            reason: reason || '',
+            continueAfter: true,
+        }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(result.error || (typeof window.t === 'function' ? window.t('tasks.cancelFailed') : '取消失败'));
+    }
+    return result;
+}
+
+function openUserInterruptModal(progressId, conversationId) {
+    userInterruptModalPending = { progressId, conversationId };
+    const ta = document.getElementById('user-interrupt-reason');
+    if (ta) {
+        ta.value = '';
+    }
+    const m = document.getElementById('user-interrupt-modal');
+    if (m) {
+        m.style.display = 'block';
+    }
+}
+
+function closeUserInterruptModal() {
+    userInterruptModalPending = null;
+    const m = document.getElementById('user-interrupt-modal');
+    if (m) {
+        m.style.display = 'none';
+    }
+}
+
+async function submitUserInterruptContinue() {
+    if (!userInterruptModalPending) {
+        return;
+    }
+    const reason = (document.getElementById('user-interrupt-reason') && document.getElementById('user-interrupt-reason').value || '').trim();
+    if (!reason) {
+        alert(typeof window.t === 'function' ? window.t('tasks.interruptReasonRequired') : '请填写中断说明');
+        return;
+    }
+    const { progressId, conversationId } = userInterruptModalPending;
+    closeUserInterruptModal();
+    const stopBtn = document.getElementById(`${progressId}-stop-btn`);
+    try {
+        if (stopBtn) {
+            stopBtn.disabled = true;
+            stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.interruptSubmitting') : '提交中...';
+        }
+        await requestCancelWithContinue(conversationId, reason);
+        loadActiveTasks();
+    } catch (error) {
+        console.error('中断并继续失败:', error);
+        alert((typeof window.t === 'function' ? window.t('tasks.cancelTaskFailed') : '操作失败') + ': ' + error.message);
+    } finally {
+        if (stopBtn) {
+            stopBtn.disabled = false;
+            stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.stopTask') : '停止任务';
+        }
+    }
+}
+
+async function submitUserInterruptHardCancel() {
+    if (!userInterruptModalPending) {
+        return;
+    }
+    const { progressId } = userInterruptModalPending;
+    closeUserInterruptModal();
+    await performHardCancelProgressTask(progressId);
+}
+
+/** 彻底停止任务（原「停止任务」行为） */
+async function performHardCancelProgressTask(progressId) {
+    const state = progressTaskState.get(progressId);
+    const stopBtn = document.getElementById(`${progressId}-stop-btn`);
+
+    if (!state || !state.conversationId) {
+        if (stopBtn) {
+            stopBtn.disabled = true;
+            setTimeout(() => {
+                stopBtn.disabled = false;
+            }, 1500);
+        }
+        alert(typeof window.t === 'function' ? window.t('tasks.taskInfoNotSynced') : '任务信息尚未同步，请稍后再试。');
+        return;
+    }
+
+    if (state.cancelling) {
+        return;
+    }
+
+    markProgressCancelling(progressId);
+    if (stopBtn) {
+        stopBtn.disabled = true;
+        stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.cancelling') : '取消中...';
+    }
+
+    try {
+        await requestCancel(state.conversationId);
+        loadActiveTasks();
+    } catch (error) {
+        console.error('取消任务失败:', error);
+        alert((typeof window.t === 'function' ? window.t('tasks.cancelTaskFailed') : '取消任务失败') + ': ' + error.message);
+        if (stopBtn) {
+            stopBtn.disabled = false;
+            stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.stopTask') : '停止任务';
+        }
+        const currentState = progressTaskState.get(progressId);
+        if (currentState) {
+            currentState.cancelling = false;
+        }
+    }
+}
+
 function addProgressMessage() {
     const messagesDiv = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
@@ -737,7 +861,7 @@ function toggleProcessDetails(progressId, assistantMessageId) {
     }
 }
 
-// 停止当前进度对应的任务
+// 停止当前进度：弹出「中断并说明 / 彻底停止」
 async function cancelProgressTask(progressId) {
     const state = progressTaskState.get(progressId);
     const stopBtn = document.getElementById(`${progressId}-stop-btn`);
@@ -757,27 +881,7 @@ async function cancelProgressTask(progressId) {
         return;
     }
 
-    markProgressCancelling(progressId);
-    if (stopBtn) {
-        stopBtn.disabled = true;
-        stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.cancelling') : '取消中...';
-    }
-
-    try {
-        await requestCancel(state.conversationId);
-        loadActiveTasks();
-    } catch (error) {
-        console.error('取消任务失败:', error);
-        alert((typeof window.t === 'function' ? window.t('tasks.cancelTaskFailed') : '取消任务失败') + ': ' + error.message);
-        if (stopBtn) {
-            stopBtn.disabled = false;
-            stopBtn.textContent = typeof window.t === 'function' ? window.t('tasks.stopTask') : '停止任务';
-        }
-        const currentState = progressTaskState.get(progressId);
-        if (currentState) {
-            currentState.cancelling = false;
-        }
-    }
+    openUserInterruptModal(progressId, state.conversationId);
 }
 
 // 将进度消息转换为可折叠的详情组件
@@ -1414,6 +1518,18 @@ function handleStreamEvent(event, progressElement, progressId,
             break;
         }
             
+        case 'user_interrupt_continue': {
+            const d = event.data || {};
+            const reason = (d.reason != null && String(d.reason).trim() !== '') ? String(d.reason).trim() : (event.message || '');
+            const timelineTitle = typeof window.t === 'function' ? window.t('tasks.userInterruptTimelineTitle') : '用户中断说明（继续迭代）';
+            addTimelineItem(timeline, 'user_interrupt', {
+                title: '✋ ' + timelineTitle,
+                message: reason,
+                data: d,
+            });
+            break;
+        }
+
         case 'progress':
             const progressTitle = document.querySelector(`#${progressId} .progress-title`);
             if (progressTitle) {
@@ -2777,7 +2893,8 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
     const viewDetailLabel = typeof window.t === 'function' ? window.t('mcpMonitor.viewDetail') : '查看详情';
     const deleteLabel = typeof window.t === 'function' ? window.t('mcpMonitor.delete') : '删除';
     const deleteExecTitle = typeof window.t === 'function' ? window.t('mcpMonitor.deleteExecTitle') : '删除此执行记录';
-    const statusKeyMap = { pending: 'statusPending', running: 'statusRunning', completed: 'statusCompleted', failed: 'statusFailed' };
+    const terminateLabel = typeof window.t === 'function' ? window.t('mcpMonitor.terminateExecution') : '终止';
+    const statusKeyMap = { pending: 'statusPending', running: 'statusRunning', completed: 'statusCompleted', failed: 'statusFailed', cancelled: 'statusCancelled' };
     const locale = (typeof window.__locale === 'string' && window.__locale.startsWith('zh')) ? 'zh-CN' : undefined;
     const rows = executions
         .map(exec => {
@@ -2788,7 +2905,11 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
             const startTime = exec.startTime ? (new Date(exec.startTime).toLocaleString ? new Date(exec.startTime).toLocaleString(locale || 'en-US') : String(exec.startTime)) : unknownLabel;
             const duration = formatExecutionDuration(exec.startTime, exec.endTime);
             const toolName = escapeHtml(exec.toolName || unknownToolLabel);
-            const executionId = escapeHtml(exec.id || '');
+            const rawExecId = exec.id || '';
+            const executionId = escapeHtml(rawExecId);
+            const terminateBtn = status === 'running'
+                ? `<button type="button" class="btn-secondary btn-monitor-abort" onclick="cancelMCPToolExecution('${rawExecId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">${escapeHtml(terminateLabel)}</button>`
+                : '';
             return `
                 <tr>
                     <td>
@@ -2801,6 +2922,7 @@ function renderMonitorExecutions(executions = [], statusFilter = 'all') {
                     <td>
                         <div class="monitor-execution-actions">
                             <button class="btn-secondary" onclick="showMCPDetail('${executionId}')">${escapeHtml(viewDetailLabel)}</button>
+                            ${terminateBtn}
                             <button class="btn-secondary btn-delete" onclick="deleteExecution('${executionId}')" title="${escapeHtml(deleteExecTitle)}">${escapeHtml(deleteLabel)}</button>
                         </div>
                     </td>

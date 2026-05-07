@@ -2446,7 +2446,24 @@ async function showMCPDetail(executionId) {
                     }
                 }
             } else {
-                responseElement.textContent = typeof window.t === 'function' ? window.t('chat.noResponseData') : '暂无响应数据';
+                if (normalizedStatus === 'running') {
+                    responseElement.textContent = typeof window.t === 'function' ? window.t('mcpDetailModal.runningNoResponseYet') : '尚无返回，工具可能仍在执行。若长时间无响应，可在下方终止本次调用。';
+                } else {
+                    responseElement.textContent = typeof window.t === 'function' ? window.t('chat.noResponseData') : '暂无响应数据';
+                }
+            }
+
+            const abortSection = document.getElementById('detail-abort-section');
+            const abortBtn = document.getElementById('detail-abort-btn');
+            if (abortSection && abortBtn) {
+                if (normalizedStatus === 'running') {
+                    abortSection.style.display = 'block';
+                    abortBtn.dataset.execId = exec.id || '';
+                    abortBtn.textContent = typeof window.t === 'function' ? window.t('mcpDetailModal.abortBtn') : '终止工具';
+                } else {
+                    abortSection.style.display = 'none';
+                    delete abortBtn.dataset.execId;
+                }
             }
             
             // 显示模态框
@@ -2462,6 +2479,101 @@ async function showMCPDetail(executionId) {
 // 关闭MCP详情模态框
 function closeMCPDetail() {
     document.getElementById('mcp-detail-modal').style.display = 'none';
+}
+
+/** 从详情模态框触发：取消当前进行中的 MCP 工具调用 */
+async function abortMCPToolExecutionFromDetail() {
+    const btn = document.getElementById('detail-abort-btn');
+    const id = btn && btn.dataset.execId;
+    if (!id) {
+        return;
+    }
+    await cancelMCPToolExecution(id, { refreshDetail: true });
+}
+
+/**
+ * 打开 MCP 工具终止弹窗（说明会经服务端加上「用户终止说明」标题块后与工具输出合并给模型）
+ * @param {string} executionId
+ * @param {{ refreshDetail?: boolean }} [options]
+ */
+function openMcpToolAbortModal(executionId, options = {}) {
+    window.__mcpToolAbortContext = { executionId: executionId, options: options || {} };
+    const ta = document.getElementById('mcp-tool-abort-note');
+    if (ta) {
+        ta.value = '';
+    }
+    const m = document.getElementById('mcp-tool-abort-modal');
+    if (m) {
+        m.style.display = 'block';
+    }
+}
+
+function closeMcpToolAbortModal() {
+    window.__mcpToolAbortContext = null;
+    const m = document.getElementById('mcp-tool-abort-modal');
+    if (m) {
+        m.style.display = 'none';
+    }
+}
+
+async function submitMcpToolAbortModal() {
+    const ctx = window.__mcpToolAbortContext;
+    if (!ctx || !ctx.executionId) {
+        closeMcpToolAbortModal();
+        return;
+    }
+    const note = (document.getElementById('mcp-tool-abort-note') && document.getElementById('mcp-tool-abort-note').value || '').trim();
+    const executionId = ctx.executionId;
+    const options = ctx.options || {};
+    closeMcpToolAbortModal();
+    await cancelMCPToolExecutionSubmit(executionId, note, options);
+}
+
+/**
+ * 提交终止请求（body: { note }）
+ * @param {string} executionId
+ * @param {string} userNote
+ * @param {{ refreshDetail?: boolean }} [options]
+ */
+async function cancelMCPToolExecutionSubmit(executionId, userNote, options = {}) {
+    if (!executionId) {
+        return;
+    }
+    try {
+        const res = await apiFetch(`/api/monitor/execution/${encodeURIComponent(executionId)}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: userNote || '' }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(body.error || body.message || res.statusText);
+        }
+        const okMsg = typeof window.t === 'function' ? window.t('mcpDetailModal.abortSuccess') : '已发送终止请求';
+        alert(okMsg);
+        if (options.refreshDetail && typeof showMCPDetail === 'function') {
+            await showMCPDetail(executionId);
+        }
+        if (typeof refreshMonitorPanel === 'function') {
+            const page = (typeof monitorState !== 'undefined' && monitorState.pagination && monitorState.pagination.page) ? monitorState.pagination.page : 1;
+            await refreshMonitorPanel(page);
+        }
+    } catch (e) {
+        const failMsg = typeof window.t === 'function' ? window.t('mcpDetailModal.abortFailed') : '终止失败';
+        alert(failMsg + ': ' + (e && e.message ? e.message : String(e)));
+    }
+}
+
+/**
+ * 取消单次 MCP 工具执行（监控页「终止」）。弹出说明框后提交；仅取消该次 tools/call，不停止整条对话/迭代任务。
+ * @param {string} executionId
+ * @param {{ refreshDetail?: boolean }} [options]
+ */
+async function cancelMCPToolExecution(executionId, options = {}) {
+    if (!executionId) {
+        return;
+    }
+    openMcpToolAbortModal(executionId, options);
 }
 
 // 复制详情面板中的内容
