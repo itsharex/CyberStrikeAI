@@ -877,6 +877,9 @@ func runEinoADKAgentLoop(ctx context.Context, args *einoADKRunLoopArgs, baseMsgs
 			if toolCallID != "" {
 				removePendingByID(toolCallID)
 				if _, loaded := toolResultSent.LoadOrStore(toolCallID, struct{}{}); loaded {
+					// ToolInvokeNotify 可能已推过 tool_result（如 execute 流式包装里 Fire 仅携带截断后的 stdout），
+					// 此处仍应用 ADK Tool 消息中的完整内容刷新去重基准，避免模型复述全文时与截断串比对失败而重复展示「助手输出」。
+					recordPendingExecuteStdoutDup(toolName, content, isErr)
 					continue
 				}
 				data["toolCallId"] = toolCallID
