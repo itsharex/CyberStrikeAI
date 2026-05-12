@@ -22,6 +22,9 @@ import (
 //
 // 使用 Pipe 将内层流转发给调用方：在 inner EOF 后、关闭 Pipe 前同步调用 ToolInvokeNotify.Fire，
 // 保证 run loop 在模型开始下一轮输出前已记录 execute 结果（用于 UI 与「重复助手复述」去重）。
+//
+// 若 inner 在校验阶段直接返回 error（未建立 reader），不会进入下方 goroutine，也必须 Fire；
+// 否则 pending tool_call 要等整轮 run 结束才被 force-close，与已展示的助手/工具软错误文案不同步。
 type einoStreamingShellWrap struct {
 	inner         filesystem.StreamingShell
 	invokeNotify  *einomcp.ToolInvokeNotifyHolder
@@ -42,17 +45,24 @@ func (w *einoStreamingShellWrap) ExecuteStreaming(ctx context.Context, input *fi
 	if security.IsBackgroundShellCommand(req.Command) && !req.RunInBackendGround {
 		req.RunInBackendGround = true
 	}
+	tid := strings.TrimSpace(compose.GetToolCallID(ctx))
+	agentTag := strings.TrimSpace(w.einoAgentName)
+
 	sr, err := w.inner.ExecuteStreaming(ctx, &req)
 	if err != nil {
+		if w.recordMonitor != nil {
+			w.recordMonitor(cmd, "", false, err)
+		}
+		if w.invokeNotify != nil && tid != "" {
+			w.invokeNotify.Fire(tid, "execute", agentTag, false, "", err)
+		}
 		return nil, err
 	}
-	tid := strings.TrimSpace(compose.GetToolCallID(ctx))
 	if sr == nil || w.invokeNotify == nil || tid == "" {
 		return sr, nil
 	}
 
 	outR, outW := schema.Pipe[*filesystem.ExecuteResponse](32)
-	agentTag := strings.TrimSpace(w.einoAgentName)
 
 	go func(inner *schema.StreamReader[*filesystem.ExecuteResponse], command string) {
 		defer inner.Close()

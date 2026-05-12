@@ -173,7 +173,7 @@ func RunEinoSingleChatModelAgent(
 			UnknownToolsHandler: einomcp.UnknownToolReminderHandler(),
 			ToolCallMiddlewares: []compose.ToolMiddleware{
 				hitlToolCallMiddleware(),
-				{Invokable: softRecoveryToolCallMiddleware()},
+				softRecoveryToolMiddleware(),
 			},
 		},
 		EmitInternalEvents: true,
