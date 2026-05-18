@@ -3120,9 +3120,102 @@ function getMcpToolRateClass(rateNum) {
 
 const MCP_STATS_DIST_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#14b8a6', '#ec4899'];
 
-function renderMcpStatsInsightPanel(topTools, totals) {
+function mcpStatsDescribeDonutSegment(startPct, endPct, outerR, innerR) {
+    if (endPct <= startPct) return '';
+    const span = endPct - startPct;
+    const cx = 50;
+    const cy = 50;
+    const point = (pct, r) => {
+        const rad = ((pct / 100) * 360 - 90) * Math.PI / 180;
+        return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+    };
+    if (span >= 99.995) {
+        const [x1, y1] = point(0, outerR);
+        const [x2, y2] = point(50, outerR);
+        const [x3, y3] = point(50, innerR);
+        const [x4, y4] = point(0, innerR);
+        const [x5, y5] = point(50, outerR);
+        const [x6, y6] = point(100, outerR);
+        const [x7, y7] = point(100, innerR);
+        const [x8, y8] = point(50, innerR);
+        return `M ${x1.toFixed(3)} ${y1.toFixed(3)} A ${outerR} ${outerR} 0 0 1 ${x2.toFixed(3)} ${y2.toFixed(3)} A ${outerR} ${outerR} 0 0 1 ${x6.toFixed(3)} ${y6.toFixed(3)} L ${x7.toFixed(3)} ${y7.toFixed(3)} A ${innerR} ${innerR} 0 0 0 ${x8.toFixed(3)} ${y8.toFixed(3)} A ${innerR} ${innerR} 0 0 0 ${x4.toFixed(3)} ${y4.toFixed(3)} Z`;
+    }
+    const large = span > 50 ? 1 : 0;
+    const [x1, y1] = point(startPct, outerR);
+    const [x2, y2] = point(endPct, outerR);
+    const [x3, y3] = point(endPct, innerR);
+    const [x4, y4] = point(startPct, innerR);
+    return `M ${x1.toFixed(3)} ${y1.toFixed(3)} A ${outerR} ${outerR} 0 ${large} 1 ${x2.toFixed(3)} ${y2.toFixed(3)} L ${x3.toFixed(3)} ${y3.toFixed(3)} A ${innerR} ${innerR} 0 ${large} 0 ${x4.toFixed(3)} ${y4.toFixed(3)} Z`;
+}
+
+function resetMcpStatsDistCenter(panel) {
+    if (!panel) return;
+    const label = panel.querySelector('.mcp-stats-dist-donut-label');
+    const value = panel.querySelector('.mcp-stats-dist-donut-value');
+    const unit = panel.querySelector('.mcp-stats-dist-donut-unit');
+    if (!label || !value) return;
+    label.textContent = panel.getAttribute('data-center-label') || '';
+    label.classList.add('is-default');
+    const centerVal = panel.getAttribute('data-center-value') || '';
+    const numEl = panel.querySelector('.mcp-stats-dist-donut-value-num');
+    if (numEl) numEl.textContent = centerVal;
+    else value.textContent = centerVal;
+    if (unit) {
+        unit.textContent = panel.getAttribute('data-center-suffix') || '%';
+        unit.hidden = false;
+    }
+}
+
+function previewMcpStatsDistCenter(panel, toolName, pct) {
+    if (!panel) return;
+    const label = panel.querySelector('.mcp-stats-dist-donut-label');
+    const value = panel.querySelector('.mcp-stats-dist-donut-value');
+    const unit = panel.querySelector('.mcp-stats-dist-donut-unit');
+    if (!label || !value) return;
+    const shortName = toolName.length > 14 ? `${toolName.slice(0, 13)}…` : toolName;
+    label.textContent = shortName;
+    label.classList.remove('is-default');
+    const numEl = panel.querySelector('.mcp-stats-dist-donut-value-num');
+    if (numEl) numEl.textContent = pct;
+    else value.textContent = pct;
+    if (unit) unit.hidden = false;
+}
+
+function setMcpStatsDistHover(toolName) {
+    const panel = document.querySelector('.mcp-stats-dist-panel');
+    if (!panel) return;
+    const esc = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(toolName) : toolName.replace(/"/g, '\\"');
+    panel.querySelectorAll('.mcp-stats-dist-segment, .mcp-stats-dist-legend-item').forEach((el) => {
+        const t = el.getAttribute('data-tool-name') || '';
+        const match = toolName && t === toolName;
+        el.classList.toggle('is-highlighted', !!match);
+        el.classList.toggle('is-dimmed', !!toolName && !match && t);
+    });
+    if (toolName) {
+        const el = panel.querySelector(`[data-tool-name="${esc}"]`);
+        if (el) {
+            previewMcpStatsDistCenter(panel, toolName, el.getAttribute('data-pct') || '');
+        }
+    } else {
+        resetMcpStatsDistCenter(panel);
+    }
+}
+
+function handleMonitorStatsToolFilter(toolName) {
+    if (!toolName) return;
+    const toolFilter = document.getElementById('monitor-tool-filter');
+    if (toolFilter && toolFilter.value === toolName) {
+        clearMonitorToolFilter();
+        return;
+    }
+    filterMonitorByTool(toolName);
+}
+
+function renderMcpStatsInsightPanel(topTools, totals, activeToolFilter = '') {
     const distTitle = mcpMonitorT('distTitle') || '调用分布';
     const distLegend = mcpMonitorT('distLegend') || '扇区面积为占全部调用比例';
+    const distClickHint = mcpMonitorT('distClickHint') || '点击图例或扇区筛选执行记录';
+    const distOthersTitle = mcpMonitorT('distOthersNoFilter') || '其他工具无法单独筛选';
     const top6ShareLabel = mcpMonitorT('distTop6Share', { n: MCP_STATS_TOP_N }) || `Top ${MCP_STATS_TOP_N} 占全部调用`;
     const othersLabel = mcpMonitorT('distOthers') || '其他工具';
     const callsUnit = (n) => mcpMonitorT('distCallsUnit', { n }) || `${n} 次`;
@@ -3144,6 +3237,7 @@ function renderMcpStatsInsightPanel(topTools, totals) {
             name: tool.toolName || '',
             calls,
             pct: pct.toFixed(1),
+            isOthers: false,
         });
         acc += pct;
     });
@@ -3156,19 +3250,51 @@ function renderMcpStatsInsightPanel(topTools, totals) {
             name: othersLabel,
             calls: otherCalls,
             pct: pct.toFixed(1),
+            isOthers: true,
         });
     }
-    const conic = segments.length > 0
-        ? segments.map(s => `${s.color} ${s.start.toFixed(2)}% ${s.end.toFixed(2)}%`).join(', ')
-        : '#e2e8f0 0% 100%';
 
-    const legendHtml = segments.map(s => `
-        <li class="mcp-stats-dist-legend-item">
+    const segmentPathsHtml = segments.map((s) => {
+        const pathD = mcpStatsDescribeDonutSegment(s.start, s.end, 48, 30);
+        if (!pathD) return '';
+        const isActive = !s.isOthers && activeToolFilter && activeToolFilter === s.name;
+        const segAria = s.isOthers
+            ? escapeHtml(s.name)
+            : escapeHtml(mcpMonitorT('distSegmentAria', { name: s.name, pct: s.pct, calls: s.calls })
+                || `${s.name}，占 ${s.pct}%，${s.calls} 次`);
+        return `<path class="mcp-stats-dist-segment${isActive ? ' is-active' : ''}${s.isOthers ? ' is-others' : ''}"
+            d="${pathD}"
+            fill="${s.color}"
+            data-tool-name="${s.isOthers ? '' : escapeHtml(s.name)}"
+            data-pct="${s.pct}"
+            data-calls="${s.calls}"
+            data-is-others="${s.isOthers ? '1' : '0'}"
+            tabindex="${s.isOthers ? '-1' : '0'}"
+            role="${s.isOthers ? 'presentation' : 'button'}"
+            aria-label="${segAria}" />`;
+    }).join('');
+
+    const legendHtml = segments.map((s) => {
+        const isActive = !s.isOthers && activeToolFilter && activeToolFilter === s.name;
+        const inner = `
             <span class="mcp-stats-dist-swatch" style="--swatch-color:${s.color}"></span>
             <span class="mcp-stats-dist-legend-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span>
-            <span class="mcp-stats-dist-legend-meta"><em>${s.pct}%</em><span>${escapeHtml(callsUnit(s.calls))}</span></span>
-        </li>
-    `).join('');
+            <span class="mcp-stats-dist-legend-meta"><em>${s.pct}%</em><span>${escapeHtml(callsUnit(s.calls))}</span></span>`;
+        if (s.isOthers) {
+            return `<li class="mcp-stats-dist-legend-item is-others" title="${escapeHtml(distOthersTitle)}" data-is-others="1">${inner}</li>`;
+        }
+        const rowAria = mcpMonitorT('toolRowAriaLabel', { name: s.name, total: s.calls, rate: s.pct })
+            || `${s.name}，${s.calls} 次调用，占 ${s.pct}%`;
+        return `<li class="mcp-stats-dist-legend-item-wrap">
+            <button type="button" class="mcp-stats-dist-legend-item${isActive ? ' is-active' : ''}"
+                data-tool-name="${escapeHtml(s.name)}"
+                data-pct="${s.pct}"
+                data-calls="${s.calls}"
+                data-is-others="0"
+                aria-label="${escapeHtml(rowAria)}"
+                aria-pressed="${isActive ? 'true' : 'false'}">${inner}</button>
+        </li>`;
+    }).join('');
 
     const centerLabel = `Top ${MCP_STATS_TOP_N}`;
     const distHint = totals.total > 0
@@ -3176,25 +3302,30 @@ function renderMcpStatsInsightPanel(topTools, totals) {
         : '';
 
     return `
-        <div class="mcp-stats-tools-panel mcp-stats-dist-panel" aria-label="${escapeHtml(distTitle)}">
+        <div class="mcp-stats-tools-panel mcp-stats-dist-panel" aria-label="${escapeHtml(distTitle)}"
+            data-center-label="${escapeHtml(centerLabel)}"
+            data-center-value="${top6SharePct}"
+            data-center-suffix="%">
             <div class="mcp-stats-tools-header">
                 <div class="mcp-stats-tools-heading">
                     <h4 class="mcp-stats-tools-title">${escapeHtml(distTitle)}</h4>
-                    <span class="mcp-stats-tools-legend">${escapeHtml(distLegend)}</span>
+                    <span class="mcp-stats-tools-legend">${escapeHtml(distLegend)} · ${escapeHtml(distClickHint)}</span>
                 </div>
-                ${distHint ? `<span class="mcp-stats-tools-hint">${escapeHtml(distHint)}</span>` : ''}
+                <span class="mcp-stats-tools-hint">${escapeHtml(distHint)}</span>
             </div>
             <div class="mcp-stats-dist-body mcp-stats-dist-body--stacked">
-                    <div class="mcp-stats-dist-chart-stage">
-                        <div class="mcp-stats-dist-chart-wrap">
-                            <div class="mcp-stats-dist-donut" style="background:conic-gradient(${conic})" role="img" aria-label="${escapeHtml(top6ShareLabel)} ${top6SharePct}%"></div>
-                            <div class="mcp-stats-dist-donut-hole">
-                                <span class="mcp-stats-dist-donut-label">${centerLabel}</span>
-                                <span class="mcp-stats-dist-donut-value">${top6SharePct}<span class="mcp-stats-dist-donut-unit">%</span></span>
-                            </div>
+                <div class="mcp-stats-dist-chart-stage">
+                    <div class="mcp-stats-dist-chart-wrap">
+                        <svg class="mcp-stats-dist-svg" viewBox="0 0 100 100" role="img" aria-label="${escapeHtml(top6ShareLabel)} ${top6SharePct}%">
+                            <g class="mcp-stats-dist-segments">${segmentPathsHtml}</g>
+                        </svg>
+                        <div class="mcp-stats-dist-donut-hole" aria-hidden="true">
+                            <span class="mcp-stats-dist-donut-label is-default">${centerLabel}</span>
+                            <span class="mcp-stats-dist-donut-value"><span class="mcp-stats-dist-donut-value-num">${top6SharePct}</span><span class="mcp-stats-dist-donut-unit">%</span></span>
                         </div>
                     </div>
-                    <ul class="mcp-stats-dist-legend mcp-stats-dist-legend--grid">${legendHtml}</ul>
+                </div>
+                <ul class="mcp-stats-dist-legend mcp-stats-dist-legend--grid">${legendHtml}</ul>
             </div>
         </div>
     `;
@@ -3260,13 +3391,48 @@ function bindMonitorStatsPanelEvents() {
             clearMonitorToolFilter();
             return;
         }
-const row = e.target.closest('.mcp-stats-tool-row');
+        const distEl = e.target.closest('.mcp-stats-dist-segment[data-tool-name], .mcp-stats-dist-legend-item[data-tool-name]');
+        if (distEl && distEl.getAttribute('data-is-others') !== '1') {
+            const tool = distEl.getAttribute('data-tool-name');
+            if (tool) {
+                e.preventDefault();
+                handleMonitorStatsToolFilter(tool);
+            }
+            return;
+        }
+        const row = e.target.closest('.mcp-stats-tool-row');
         if (!row) return;
         const tool = row.getAttribute('data-tool-name');
         if (tool) {
             e.preventDefault();
-            filterMonitorByTool(tool);
+            handleMonitorStatsToolFilter(tool);
         }
+    });
+    root.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const distSeg = e.target.closest('.mcp-stats-dist-segment[data-tool-name]');
+        if (!distSeg || distSeg.getAttribute('data-is-others') === '1') return;
+        const tool = distSeg.getAttribute('data-tool-name');
+        if (tool) {
+            e.preventDefault();
+            handleMonitorStatsToolFilter(tool);
+        }
+    });
+    root.addEventListener('mouseover', function (e) {
+        const el = e.target.closest('.mcp-stats-dist-segment[data-tool-name], .mcp-stats-dist-legend-item[data-tool-name]');
+        if (!el || el.getAttribute('data-is-others') === '1') return;
+        const tool = el.getAttribute('data-tool-name');
+        if (tool) setMcpStatsDistHover(tool);
+    });
+    root.addEventListener('mouseout', function (e) {
+        const el = e.target.closest('.mcp-stats-dist-segment[data-tool-name], .mcp-stats-dist-legend-item[data-tool-name]');
+        if (!el) return;
+        const related = e.relatedTarget;
+        const next = related && related.closest
+            ? related.closest('.mcp-stats-dist-segment[data-tool-name], .mcp-stats-dist-legend-item[data-tool-name]')
+            : null;
+        if (next) return;
+        setMcpStatsDistHover('');
     });
     monitorStatsPanelEventsBound = true;
 }
@@ -3433,7 +3599,7 @@ function renderMonitorStats(statsMap = {}, lastFetchedAt = null) {
                     </div>
                 </div>
                 <div class="mcp-stats-split-right">
-                    ${renderMcpStatsInsightPanel(topTools, totals)}
+                    ${renderMcpStatsInsightPanel(topTools, totals, activeToolFilter)}
                 </div>
             </div>
             ` : ''}
