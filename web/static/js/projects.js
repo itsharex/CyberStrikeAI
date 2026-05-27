@@ -906,6 +906,13 @@ function showNewProjectModal() {
     openProjectsOverlay('project-modal');
 }
 
+/** 从对话区「选择项目」面板打开新建项目，创建成功后自动绑定当前对话 */
+function showNewProjectModalFromChat() {
+    closeChatProjectPanel();
+    window._projectModalFromChat = true;
+    showNewProjectModal();
+}
+
 async function saveProjectModal() {
     const name = document.getElementById('project-modal-name').value.trim();
     if (!name) return alert('请输入项目名称');
@@ -922,13 +929,22 @@ async function saveProjectModal() {
         alert(err.error || '保存失败');
         return;
     }
+    const fromChat = !!window._projectModalFromChat;
+    window._projectModalFromChat = false;
     closeProjectModal();
     const saved = await res.json();
     await loadProjectsList();
-    if (saved.id) await selectProject(saved.id);
+    if (saved.id) {
+        if (fromChat && !editId) {
+            await applyChatProjectSelection(saved.id);
+        } else {
+            await selectProject(saved.id);
+        }
+    }
 }
 
 function closeProjectModal() {
+    window._projectModalFromChat = false;
     closeProjectsOverlay('project-modal');
 }
 
@@ -1259,7 +1275,7 @@ function renderChatProjectPanelList() {
     const activeProjects = projectsCache.filter((p) => p.status !== 'archived');
     const items = [{ id: '', name: '无项目', description: '不绑定项目黑板' }, ...activeProjects];
     if (!items.length) {
-        list.innerHTML = '<div class="chat-project-panel-empty">暂无项目，可在「项目管理」中创建</div>';
+        list.innerHTML = '<div class="chat-project-panel-empty">暂无项目，点击下方「新建项目」</div>';
         return;
     }
     list.innerHTML = '';
@@ -1414,6 +1430,7 @@ if (document.readyState === 'loading') {
 
 window.initProjectsPage = initProjectsPage;
 window.showNewProjectModal = showNewProjectModal;
+window.showNewProjectModalFromChat = showNewProjectModalFromChat;
 window.saveProjectModal = saveProjectModal;
 window.closeProjectModal = closeProjectModal;
 window.selectProject = selectProject;

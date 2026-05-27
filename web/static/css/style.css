@@ -22376,12 +22376,75 @@ body.projects-modal-open {
 .chat-project-panel {
     width: 280px;
 }
+/* 列表 + 底部按钮共用同一内容宽度，避免滚动条缩进导致左右不齐 */
+.chat-project-panel-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+.chat-project-panel .role-selection-list-main {
+    flex: 1;
+    min-height: 0;
+    max-height: min(360px, 50vh);
+    padding-right: 0;
+    margin: 0;
+    width: 100%;
+}
+.chat-project-panel .role-selection-item-main {
+    width: 100%;
+    min-width: 0;
+}
 .chat-project-panel-loading,
 .chat-project-panel-empty {
-    padding: 16px 14px;
+    padding: 16px 0;
     font-size: 0.8125rem;
     color: #64748b;
     text-align: center;
+}
+.chat-project-panel-footer {
+    flex-shrink: 0;
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    width: 100%;
+}
+.chat-project-panel .role-selection-item-main.chat-project-panel-create-btn {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 12px;
+    border: 1.5px dashed rgba(99, 102, 241, 0.45);
+    border-radius: 12px;
+    background: rgba(99, 102, 241, 0.06);
+    color: #4f46e5;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: none;
+    transform: none;
+}
+.chat-project-panel .role-selection-item-main.chat-project-panel-create-btn:hover,
+.chat-project-panel .role-selection-item-main.chat-project-panel-create-btn:focus-visible,
+.chat-project-panel .role-selection-item-main.chat-project-panel-create-btn:active {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.65);
+    color: #4338ca;
+    box-shadow: none;
+    transform: none;
+}
+.chat-project-panel-create-icon {
+    flex-shrink: 0;
+    font-size: 1.125rem;
+    line-height: 1;
+    font-weight: 500;
+}
+.chat-project-panel-create-label {
+    line-height: 1.4;
 }
 @media (max-width: 900px) {
     #page-projects .page-content.projects-page-layout {
