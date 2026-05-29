@@ -995,6 +995,8 @@ async function sendMessage() {
                     }
                 }
             }
+            // Flush decoder internal buffer to avoid losing the final partial UTF-8 code point.
+            buffer += decoder.decode();
 
             // 处理剩余的buffer
             if (buffer.trim()) {
