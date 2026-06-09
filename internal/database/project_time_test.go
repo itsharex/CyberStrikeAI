@@ -37,7 +37,7 @@ func TestListProjectFacts_updatedAtJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projects, err := db.ListProjects("", 1, 0)
+	projects, err := db.ListProjects("", "", 1, 0)
 	if err != nil || len(projects) == 0 {
 		t.Skip("no projects")
 	}

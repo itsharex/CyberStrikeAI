@@ -112,10 +112,30 @@ func (db *DB) GetProject(id string) (*Project, error) {
 	return &p, nil
 }
 
+// CountProjects 统计项目数量。
+func (db *DB) CountProjects(status, search string) (int, error) {
+	query := `SELECT COUNT(*) FROM projects WHERE 1=1`
+	args := []interface{}{}
+	if s := strings.TrimSpace(status); s != "" {
+		query += " AND status = ?"
+		args = append(args, s)
+	}
+	if q := strings.TrimSpace(search); q != "" {
+		pattern := "%" + q + "%"
+		query += " AND (name LIKE ? OR COALESCE(description,'') LIKE ?)"
+		args = append(args, pattern, pattern)
+	}
+	var count int
+	if err := db.QueryRow(query, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("统计项目失败: %w", err)
+	}
+	return count, nil
+}
+
 // ListProjects 列出项目。
-func (db *DB) ListProjects(status string, limit, offset int) ([]*Project, error) {
+func (db *DB) ListProjects(status, search string, limit, offset int) ([]*Project, error) {
 	if limit <= 0 {
-		limit = 200
+		limit = 50
 	}
 	query := `SELECT id, name, COALESCE(description,''), COALESCE(scope_json,''), status, pinned, created_at, updated_at
 		FROM projects WHERE 1=1`
@@ -123,6 +143,11 @@ func (db *DB) ListProjects(status string, limit, offset int) ([]*Project, error)
 	if s := strings.TrimSpace(status); s != "" {
 		query += " AND status = ?"
 		args = append(args, s)
+	}
+	if q := strings.TrimSpace(search); q != "" {
+		pattern := "%" + q + "%"
+		query += " AND (name LIKE ? OR COALESCE(description,'') LIKE ?)"
+		args = append(args, pattern, pattern)
 	}
 	query += " ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)

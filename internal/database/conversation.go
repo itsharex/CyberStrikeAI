@@ -361,6 +361,27 @@ func (db *DB) GetConversationLite(id string) (*Conversation, error) {
 	return &conv, nil
 }
 
+// CountConversations 统计对话数量。
+func (db *DB) CountConversations(search string) (int, error) {
+	var count int
+	var err error
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		err = db.QueryRow(
+			`SELECT COUNT(*) FROM conversations c
+			 WHERE c.title LIKE ?
+			    OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.content LIKE ?)`,
+			searchPattern, searchPattern,
+		).Scan(&count)
+	} else {
+		err = db.QueryRow(`SELECT COUNT(*) FROM conversations`).Scan(&count)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("统计对话失败: %w", err)
+	}
+	return count, nil
+}
+
 // ListConversations 列出所有对话
 func (db *DB) ListConversations(limit, offset int, search string) ([]*Conversation, error) {
 	var rows *sql.Rows
@@ -428,6 +449,73 @@ func (db *DB) ListConversations(limit, offset int, search string) ([]*Conversati
 	}
 
 	return conversations, nil
+}
+
+const ungroupedConversationsSQL = `
+	FROM conversations c
+	WHERE NOT EXISTS (
+		SELECT 1 FROM conversation_group_mappings cgm WHERE cgm.conversation_id = c.id
+	)`
+
+// CountUngroupedConversations 统计不在任何分组中的对话数量。
+func (db *DB) CountUngroupedConversations() (int, error) {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) ` + ungroupedConversationsSQL).Scan(&count); err != nil {
+		return 0, fmt.Errorf("统计未分组对话失败: %w", err)
+	}
+	return count, nil
+}
+
+// ListUngroupedConversations 列出不在任何分组中的对话（最近对话侧栏）。
+func (db *DB) ListUngroupedConversations(limit, offset int) ([]*Conversation, error) {
+	rows, err := db.Query(
+		`SELECT c.id, c.title, COALESCE(c.pinned, 0), c.created_at, c.updated_at, c.project_id `+
+			ungroupedConversationsSQL+`
+		 ORDER BY c.updated_at DESC
+		 LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询未分组对话失败: %w", err)
+	}
+	defer rows.Close()
+
+	var conversations []*Conversation
+	for rows.Next() {
+		var conv Conversation
+		var createdAt, updatedAt string
+		var pinned int
+		var projectID sql.NullString
+
+		if err := rows.Scan(&conv.ID, &conv.Title, &pinned, &createdAt, &updatedAt, &projectID); err != nil {
+			return nil, fmt.Errorf("扫描对话失败: %w", err)
+		}
+		if projectID.Valid {
+			conv.ProjectID = strings.TrimSpace(projectID.String)
+		}
+
+		var err1, err2 error
+		conv.CreatedAt, err1 = time.Parse("2006-01-02 15:04:05.999999999-07:00", createdAt)
+		if err1 != nil {
+			conv.CreatedAt, err1 = time.Parse("2006-01-02 15:04:05", createdAt)
+		}
+		if err1 != nil {
+			conv.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		}
+
+		conv.UpdatedAt, err2 = time.Parse("2006-01-02 15:04:05.999999999-07:00", updatedAt)
+		if err2 != nil {
+			conv.UpdatedAt, err2 = time.Parse("2006-01-02 15:04:05", updatedAt)
+		}
+		if err2 != nil {
+			conv.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+		}
+
+		conv.Pinned = pinned != 0
+		conversations = append(conversations, &conv)
+	}
+
+	return conversations, rows.Err()
 }
 
 // UpdateConversationTitle 更新对话标题
