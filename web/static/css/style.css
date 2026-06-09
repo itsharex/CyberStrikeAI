@@ -1658,6 +1658,14 @@ header {
     gap: 4px;
 }
 
+.conversations-list-empty {
+    padding: 12px 10px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
 .conversation-group {
     display: flex;
     flex-direction: column;
@@ -21998,12 +22006,17 @@ button.chat-files-dropdown-item:hover:not(:disabled) {
     align-self: stretch;
     display: flex;
     flex-direction: column;
+    height: 100%;
     background: #ffffff;
     border: 1px solid var(--border-color, #e2e8f0);
     border-radius: 14px;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
     overflow: hidden;
     min-height: 420px;
+}
+.projects-sidebar-head,
+.projects-sidebar-search {
+    flex-shrink: 0;
 }
 .projects-sidebar-head {
     display: flex;
@@ -22049,6 +22062,122 @@ button.chat-files-dropdown-item:hover:not(:disabled) {
     flex: 1;
     overflow-y: auto;
     padding: 6px 8px 10px;
+    min-height: 0;
+}
+.sidebar-list-pagination {
+    flex-shrink: 0;
+    border-top: 1px solid #eef2f7;
+    background: #fafbfc;
+    padding: 6px 8px;
+    margin-top: 4px;
+}
+.sidebar-list-pagination-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #64748b);
+}
+.sidebar-list-pagination-inner--compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 4px 6px;
+    flex-wrap: nowrap;
+}
+.sidebar-list-pagination .pagination-info {
+    text-align: center;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sidebar-list-pagination-inner--compact .pagination-info {
+    text-align: left;
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+}
+.sidebar-list-pagination .pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+.sidebar-list-pagination .pagination-page {
+    min-width: 2.25rem;
+    text-align: center;
+    font-weight: 500;
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+}
+.sidebar-list-pagination .pagination-page-size {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    white-space: nowrap;
+    font-size: 0.6875rem;
+    flex-shrink: 0;
+}
+.sidebar-list-pagination .pagination-page-size select {
+    font-size: 0.6875rem;
+    padding: 1px 2px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    width: 2.75rem;
+    min-width: 0;
+}
+.sidebar-list-pagination .btn-compact {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    min-height: 0;
+    line-height: 1.2;
+}
+.sidebar-list-pagination .btn-icon-pagination {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text-secondary, #64748b);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.sidebar-list-pagination .btn-icon-pagination:hover:not(:disabled) {
+    border-color: #0066ff;
+    color: #0066ff;
+}
+.sidebar-list-pagination .btn-icon-pagination:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.recent-conversations-section {
+    display: flex;
+    flex-direction: column;
+}
+.conversation-sidebar-pagination {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    background: #fff;
+    padding: 8px 10px;
+}
+.projects-sidebar-pagination {
+    margin-top: auto;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    background: #fff;
+    padding: 8px 10px;
+}
+.conversation-sidebar.collapsed .conversation-sidebar-pagination {
+    display: none;
 }
 .projects-list-item {
     position: relative;

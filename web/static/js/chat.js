@@ -2939,6 +2939,8 @@ function createConversationListItem(conversation) {
 // 处理历史记录搜索
 let conversationSearchTimer = null;
 function handleConversationSearch(query) {
+    conversationsPagination.page = 1;
+    conversationsSearchQuery = query || '';
     // 防抖处理，避免频繁请求
     if (conversationSearchTimer) {
         clearTimeout(conversationSearchTimer);
@@ -2972,6 +2974,8 @@ function clearConversationSearch() {
         clearBtn.style.display = 'none';
     }
     
+    conversationsPagination.page = 1;
+    conversationsSearchQuery = '';
     loadConversations('');
 }
 
@@ -5608,6 +5612,168 @@ let groupsCache = [];
 let conversationGroupMappingCache = {};
 let pendingGroupMappings = {}; // 待保留的分组映射（用于处理后端API延迟的情况）
 let conversationsListLoadSeq = 0; // 对话列表加载序号，避免并发请求导致重复渲染
+const CONVERSATIONS_PAGE_SIZE_KEY = 'cyberstrike.conversations_page_size';
+
+function getConversationsPageSize() {
+    try {
+        const saved = parseInt(localStorage.getItem(CONVERSATIONS_PAGE_SIZE_KEY), 10);
+        if ([20, 50, 100].includes(saved)) return saved;
+    } catch (e) { /* ignore */ }
+    return 50;
+}
+
+let conversationsPagination = { page: 1, pageSize: getConversationsPageSize(), total: 0 };
+let conversationsSearchQuery = '';
+
+function parseListTotalValue(raw, itemsLength) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return raw;
+    if (raw != null && raw !== '') {
+        const n = parseInt(String(raw), 10);
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    return itemsLength;
+}
+
+function parseListOffsetValue(raw) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return raw;
+    if (raw != null && raw !== '') {
+        const n = parseInt(String(raw), 10);
+        if (Number.isFinite(n) && n >= 0) return n;
+    }
+    return 0;
+}
+
+function parseConversationsListResponse(data) {
+    if (Array.isArray(data)) {
+        return { items: data, total: data.length, limit: data.length, offset: 0, isLegacyArray: true };
+    }
+    const items = data.conversations || data.items || [];
+    const arr = Array.isArray(items) ? items : [];
+    return {
+        items: arr,
+        total: parseListTotalValue(data.total, arr.length),
+        limit: parseListTotalValue(data.limit, arr.length) || arr.length,
+        offset: parseListOffsetValue(data.offset),
+        isLegacyArray: false,
+    };
+}
+
+async function resolveConversationsListTotal(params, parsed, pageSize, offset) {
+    const serverTotal = parsed.total;
+    if (!parsed.isLegacyArray && serverTotal > offset + parsed.items.length) {
+        return serverTotal;
+    }
+    if (parsed.items.length < pageSize) {
+        return Math.max(serverTotal, offset + parsed.items.length);
+    }
+    const probe = new URLSearchParams(params);
+    probe.set('offset', String(offset + pageSize));
+    probe.set('limit', '1');
+    try {
+        const res = await apiFetch(`/api/conversations?${probe}`);
+        if (!res.ok) return Math.max(serverTotal, offset + parsed.items.length);
+        const probeParsed = parseConversationsListResponse(await res.json());
+        if (probeParsed.total > serverTotal) return probeParsed.total;
+        if (probeParsed.items.length > 0) {
+            return Math.max(serverTotal, offset + pageSize + 1);
+        }
+    } catch (e) { /* ignore */ }
+    return Math.max(serverTotal, offset + parsed.items.length);
+}
+
+async function fetchAllConversations(searchQuery) {
+    let all = [];
+    const pageSize = 200;
+    let offset = 0;
+    let total = Infinity;
+    const search = (searchQuery || '').trim();
+    while (all.length < total) {
+        const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+        if (search) params.set('search', search);
+        const res = await apiFetch(`/api/conversations?${params}`);
+        if (!res.ok) throw new Error('load conversations failed');
+        const parsed = parseConversationsListResponse(await res.json());
+        all = all.concat(parsed.items);
+        total = parsed.total;
+        if (!parsed.items.length) break;
+        offset += parsed.items.length;
+    }
+    return all;
+}
+
+function getConversationListEmptyHtml() {
+    return '<div class="conversations-list-empty" data-i18n="chat.noHistoryConversations"></div>';
+}
+
+function renderConversationsPagination(visibleCount) {
+    const el = document.getElementById('conversations-pagination');
+    if (!el) return;
+    const { page, pageSize, total } = conversationsPagination;
+    const count = typeof visibleCount === 'number' ? visibleCount : (conversationsPagination.visibleCount || 0);
+    conversationsPagination.visibleCount = count;
+
+    if (count === 0 || total === 0) {
+        el.innerHTML = '';
+        el.hidden = true;
+        return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    const navDisabled = totalPages <= 1;
+    el.hidden = false;
+    const start = (page - 1) * pageSize + 1;
+    const end = Math.min(page * pageSize, total);
+    const tFn = typeof window.t === 'function' ? window.t.bind(window) : null;
+    const infoText = tFn
+        ? tFn('chat.paginationRange', { start, end, total })
+        : `${start}-${end}/${total}`;
+    const pageText = tFn
+        ? tFn('chat.paginationPage', { page, total: totalPages })
+        : `${page}/${totalPages}`;
+    const perPageLabel = tFn ? tFn('chat.paginationPerPage') : 'Per page';
+    const prevLabel = tFn ? tFn('chat.paginationPrev') : 'Prev';
+    const nextLabel = tFn ? tFn('chat.paginationNext') : 'Next';
+    el.innerHTML = `
+        <div class="sidebar-list-pagination-inner sidebar-list-pagination-inner--compact">
+            <span class="pagination-info">${escapeHtml(infoText)}</span>
+            <div class="pagination-controls">
+                <button type="button" class="btn-icon-pagination" onclick="goConversationsPage(${page - 1})" ${page <= 1 || navDisabled ? 'disabled' : ''} title="${escapeHtml(prevLabel)}" aria-label="${escapeHtml(prevLabel)}">‹</button>
+                <span class="pagination-page">${escapeHtml(pageText)}</span>
+                <button type="button" class="btn-icon-pagination" onclick="goConversationsPage(${page + 1})" ${page >= totalPages || navDisabled ? 'disabled' : ''} title="${escapeHtml(nextLabel)}" aria-label="${escapeHtml(nextLabel)}">›</button>
+            </div>
+            <label class="pagination-page-size">
+                ${escapeHtml(perPageLabel)}
+                <select id="conversations-page-size-pagination" onchange="changeConversationsPageSize()">
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                </select>
+            </label>
+        </div>`;
+}
+
+function goConversationsPage(page) {
+    const totalPages = Math.max(1, Math.ceil((conversationsPagination.total || 0) / conversationsPagination.pageSize) || 1);
+    const next = Math.min(Math.max(1, page), totalPages);
+    if (next === conversationsPagination.page) return;
+    conversationsPagination.page = next;
+    loadConversationsWithGroups(conversationsSearchQuery);
+}
+
+function changeConversationsPageSize() {
+    const sel = document.getElementById('conversations-page-size-pagination');
+    const newSize = sel ? parseInt(sel.value, 10) : 50;
+    if (![20, 50, 100].includes(newSize)) return;
+    try {
+        localStorage.setItem(CONVERSATIONS_PAGE_SIZE_KEY, String(newSize));
+    } catch (e) { /* ignore */ }
+    conversationsPagination.pageSize = newSize;
+    conversationsPagination.page = 1;
+    loadConversationsWithGroups(conversationsSearchQuery);
+}
+
+window.goConversationsPage = goConversationsPage;
+window.changeConversationsPageSize = changeConversationsPageSize;
 
 // 加载分组列表
 async function loadGroups() {
@@ -5704,12 +5870,17 @@ async function loadGroups() {
 async function loadConversationsWithGroups(searchQuery = '') {
     const loadSeq = ++conversationsListLoadSeq;
     try {
-        // 并行加载分组列表、分组映射和对话列表（消除串行等待）
-        const limit = (searchQuery && searchQuery.trim()) ? 100 : 100;
-        let url = `/api/conversations?limit=${limit}`;
+        conversationsSearchQuery = searchQuery || '';
+        conversationsPagination.pageSize = getConversationsPageSize();
+        const pageSize = conversationsPagination.pageSize;
+        const offset = (conversationsPagination.page - 1) * pageSize;
+        const convParams = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
         if (searchQuery && searchQuery.trim()) {
-            url += '&search=' + encodeURIComponent(searchQuery.trim());
+            convParams.set('search', searchQuery.trim());
+        } else {
+            convParams.set('exclude_grouped', 'true');
         }
+        const url = `/api/conversations?${convParams}`;
         const [,, response] = await Promise.all([
             loadGroups(),
             loadConversationGroupMapping(),
@@ -5726,23 +5897,26 @@ async function loadConversationsWithGroups(searchQuery = '') {
         const sidebarContent = listContainer.closest('.sidebar-content');
         const savedScrollTop = sidebarContent ? sidebarContent.scrollTop : 0;
 
-        const emptyStateHtml = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.875rem;" data-i18n="chat.noHistoryConversations"></div>';
+        const emptyStateHtml = getConversationListEmptyHtml();
         listContainer.innerHTML = '';
 
         // 如果响应不是200，显示空状态（友好处理，不显示错误）
         if (!response.ok) {
             listContainer.innerHTML = emptyStateHtml;
             if (typeof window.applyTranslations === 'function') window.applyTranslations(listContainer);
+            renderConversationsPagination(0);
             return;
         }
 
-        const conversations = await response.json();
+        const data = await response.json();
         if (loadSeq !== conversationsListLoadSeq) return;
+        const parsed = parseConversationsListResponse(data);
+        conversationsPagination.total = await resolveConversationsListTotal(convParams, parsed, pageSize, offset);
 
         // 双重保险：后端或并发情况下若出现重复ID，前端按ID去重
         const uniqueConversations = [];
         const seenConversationIds = new Set();
-        (Array.isArray(conversations) ? conversations : []).forEach(conv => {
+        parsed.items.forEach(conv => {
             if (!conv || !conv.id || seenConversationIds.has(conv.id)) {
                 return;
             }
@@ -5753,6 +5927,7 @@ async function loadConversationsWithGroups(searchQuery = '') {
         if (uniqueConversations.length === 0) {
             listContainer.innerHTML = emptyStateHtml;
             if (typeof window.applyTranslations === 'function') window.applyTranslations(listContainer);
+            renderConversationsPagination(0);
             return;
         }
         
@@ -5863,15 +6038,29 @@ async function loadConversationsWithGroups(searchQuery = '') {
             fragment.appendChild(section);
         });
 
+        const visibleCount = pinnedConvs.length + Object.values(groups).reduce((n, arr) => n + (arr ? arr.length : 0), 0);
+        conversationsPagination.visibleCount = visibleCount;
+
+        if (!hasSearchQuery && visibleCount === 0 && parsed.items.length > 0) {
+            const totalPages = Math.max(1, Math.ceil(parsed.total / pageSize));
+            if (conversationsPagination.page < totalPages) {
+                conversationsPagination.page += 1;
+                loadConversationsWithGroups(searchQuery);
+                return;
+            }
+        }
+
         if (fragment.children.length === 0) {
             listContainer.innerHTML = emptyStateHtml;
             if (typeof window.applyTranslations === 'function') window.applyTranslations(listContainer);
+            renderConversationsPagination(0);
             return;
         }
 
         if (loadSeq !== conversationsListLoadSeq) return;
         listContainer.appendChild(fragment);
         updateActiveConversation();
+        renderConversationsPagination(visibleCount);
         
         // 恢复滚动位置
         if (sidebarContent) {
@@ -5888,9 +6077,9 @@ async function loadConversationsWithGroups(searchQuery = '') {
         // 错误时显示空状态，而不是错误提示（更友好的用户体验）
         const listContainer = document.getElementById('conversations-list');
         if (listContainer) {
-            const emptyStateHtml = '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.875rem;" data-i18n="chat.noHistoryConversations"></div>';
-            listContainer.innerHTML = emptyStateHtml;
+            listContainer.innerHTML = getConversationListEmptyHtml();
             if (typeof window.applyTranslations === 'function') window.applyTranslations(listContainer);
+            renderConversationsPagination(0);
         }
     }
 }
@@ -7004,15 +7193,7 @@ function updateBatchManageTitle(count) {
 
 async function showBatchManageModal() {
     try {
-        const response = await apiFetch('/api/conversations?limit=1000');
-        
-        // 如果响应不是200，使用空数组（友好处理，不显示错误）
-        if (!response.ok) {
-            allConversationsForBatch = [];
-        } else {
-            const data = await response.json();
-            allConversationsForBatch = Array.isArray(data) ? data : [];
-        }
+        allConversationsForBatch = await fetchAllConversations('');
 
         const modal = document.getElementById('batch-manage-modal');
         updateBatchManageTitle(allConversationsForBatch.length);
