@@ -286,6 +286,38 @@ function extractIterationTagFromStreamIdentity(identity) {
     return s.slice(idx + 6);
 }
 
+/** Plan-Execute 多轮 executor/planner 同名代理：仅在同轮次内复用流式条目 */
+function areMainResponseStreamIterationsCompatible(prevIterTag, streamIterTag, orchestration) {
+    const orch = String(orchestration != null ? orchestration : '').trim();
+    if (orch === 'plan_execute') {
+        return prevIterTag === streamIterTag && prevIterTag !== '';
+    }
+    return !prevIterTag || !streamIterTag || prevIterTag === streamIterTag;
+}
+
+/** 仅合并 Eino 对同一段 MessageStream 重复发出的 response_start */
+function shouldReuseMainResponseStream(progressId, prevStream, responseData, streamOrch) {
+    if (!prevStream || !prevStream.itemId) {
+        return false;
+    }
+    if (!sameMainResponseStreamMeta(prevStream.streamMeta, responseData)) {
+        return false;
+    }
+    const streamId = responseData && responseData.streamId != null ? String(responseData.streamId).trim() : '';
+    if (streamId && prevStream.streamId === streamId) {
+        return true;
+    }
+    const orch = String(streamOrch != null ? streamOrch : '').trim();
+    if (orch === 'plan_execute') {
+        return false;
+    }
+    const prevIterTag = extractIterationTagFromStreamIdentity(prevStream.streamIdentity || '');
+    const streamIterTag = extractIterationTagFromStreamIdentity(
+        buildMainResponseStreamIdentity(progressId, responseData)
+    );
+    return areMainResponseStreamIterationsCompatible(prevIterTag, streamIterTag, orch);
+}
+
 // AI 思考流式输出：progressId -> Map(streamId -> { itemId, buffer })
 const thinkingStreamStateByProgressId = new Map();
 
@@ -1513,10 +1545,16 @@ function handleStreamEvent(event, progressElement, progressId,
             const n = d.iteration != null ? d.iteration : 1;
             const scope = d.einoScope != null ? String(d.einoScope).trim() : '';
             if (scope !== 'sub') {
+                const prevMainIter = mainIterationStateByProgressId.get(String(progressId));
+                const prevN = prevMainIter && prevMainIter.iteration != null ? prevMainIter.iteration : null;
                 mainIterationStateByProgressId.set(String(progressId), {
                     iteration: n,
                     orchestration: d.orchestration != null ? d.orchestration : ''
                 });
+                // 主通道进入新轮次后不复用上一轮的「执行输出」时间线条目
+                if (prevN != null && prevN !== n) {
+                    responseStreamStateByProgressId.delete(progressId);
+                }
             }
             let iterTitle;
             if (d.orchestration === 'plan_execute' && d.einoScope === 'main') {
@@ -1674,6 +1712,8 @@ function handleStreamEvent(event, progressElement, progressId,
         }
             
         case 'tool_calls_detected':
+            // 助手正文段结束、进入工具调用：下一段 response_start 应新建时间线条目
+            responseStreamStateByProgressId.delete(progressId);
             addTimelineItem(timeline, 'tool_calls_detected', {
                 title: timelineAgentBracketPrefix(event.data) + '🔧 ' + (typeof window.t === 'function' ? window.t('chat.toolCallsDetected', { count: event.data?.count || 0 }) : '检测到 ' + (event.data?.count || 0) + ' 个工具调用'),
                 message: event.message,
@@ -2106,18 +2146,16 @@ function handleStreamEvent(event, progressElement, progressId,
 
             // 多代理模式下，迭代过程中的输出只显示在时间线中，不创建助手消息气泡
             const prevStream = responseStreamStateByProgressId.get(progressId);
-            const prevIterTag = extractIterationTagFromStreamIdentity(prevStream && prevStream.streamIdentity ? prevStream.streamIdentity : '');
-            const compatibleIterTag = !prevIterTag || !streamIterTag || prevIterTag === streamIterTag;
-            if (
-                prevStream &&
-                prevStream.itemId &&
-                sameMainResponseStreamMeta(prevStream.streamMeta, responseData) &&
-                compatibleIterTag
-            ) {
+            const streamOrch = responseData.orchestration != null
+                ? responseData.orchestration
+                : (prevStream && prevStream.streamMeta ? prevStream.streamMeta.orchestration : '');
+            if (shouldReuseMainResponseStream(progressId, prevStream, responseData, streamOrch)) {
                 // Eino 可能对同一段流重复发 response_start；复用已有条目与 buffer，避免多条「助手输出」
                 prevStream.streamMeta = Object.assign({}, prevStream.streamMeta || {}, responseData);
-                // 若此前轮次未知（空），在后续事件带来轮次后升级 identity，避免跨轮误复用。
                 prevStream.streamIdentity = streamIdentity;
+                if (responseData.streamId != null) {
+                    prevStream.streamId = String(responseData.streamId).trim();
+                }
                 responseStreamStateByProgressId.set(progressId, prevStream);
                 break;
             }
@@ -2128,10 +2166,12 @@ function handleStreamEvent(event, progressElement, progressId,
                 data: Object.assign({}, responseData, { responseStreamPlaceholder: true })
             });
             responseStreamStateByProgressId.set(progressId, {
+                progressId: progressId,
                 itemId: itemId,
                 buffer: '',
                 streamMeta: responseData,
-                streamIdentity: streamIdentity
+                streamIdentity: streamIdentity,
+                streamId: responseData.streamId != null ? String(responseData.streamId).trim() : ''
             });
             break;
         }
@@ -2151,11 +2191,18 @@ function handleStreamEvent(event, progressElement, progressId,
             // 多代理模式下，迭代过程中的输出只显示在时间线中
             // 更新时间线条目内容
             let state = responseStreamStateByProgressId.get(progressId);
+            const incomingStreamId = responseData.streamId != null ? String(responseData.streamId).trim() : '';
             if (!state) {
-                state = { itemId: null, buffer: '', streamMeta: responseData };
+                state = { progressId: progressId, itemId: null, buffer: '', streamMeta: responseData, streamId: incomingStreamId };
                 responseStreamStateByProgressId.set(progressId, state);
             } else if (!state.streamMeta && responseData && (responseData.einoAgent || responseData.orchestration)) {
                 state.streamMeta = responseData;
+            }
+            if (incomingStreamId && state.streamId && state.streamId !== incomingStreamId) {
+                break;
+            }
+            if (incomingStreamId && !state.streamId) {
+                state.streamId = incomingStreamId;
             }
 
             const deltaContent = event.message || '';
