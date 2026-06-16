@@ -2419,6 +2419,9 @@ header {
     padding-top: 12px;
     border-top: 1px solid var(--border-color);
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .mcp-call-label {
@@ -2473,10 +2476,15 @@ header {
     padding-top: 12px;
     border-top: 1px solid var(--border-color);
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .process-details-content {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .process-details-content .progress-timeline {
@@ -2488,6 +2496,7 @@ header {
 
 .process-details-content .progress-timeline.expanded {
     max-height: 2000px;
+    overflow-x: hidden;
     overflow-y: auto;
     opacity: 1;
     margin-top: 12px;
@@ -3913,6 +3922,7 @@ header {
 
 .progress-timeline.expanded {
     max-height: 2000px;
+    overflow-x: hidden;
     overflow-y: auto;
 }
 
@@ -3920,7 +3930,8 @@ header {
 .progress-container.is-streaming .progress-timeline.expanded,
 .process-details-container.is-streaming .process-details-content .progress-timeline.expanded {
     max-height: none;
-    overflow: visible;
+    overflow-x: hidden;
+    overflow-y: visible;
 }
 
 .timeline-item {
@@ -3931,6 +3942,10 @@ header {
     background: var(--bg-secondary);
     border-radius: 4px;
     transition: all 0.2s;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .timeline-item:hover {
@@ -4088,12 +4103,49 @@ header {
     font-size: 0.875rem;
     color: var(--text-secondary);
     line-height: 1.6;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    overflow-x: auto;
+    box-sizing: border-box;
 }
 
 /* 流式增量阶段纯文本展示（避免半段 Markdown 反复解析） */
 .timeline-item-content.timeline-stream-plain {
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+/* 过程详情 Markdown：避免长 URL/代码/表格撑破紫/蓝时间线条目 */
+.timeline-item-content p,
+.timeline-item-content li,
+.timeline-item-content td,
+.timeline-item-content th {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.timeline-item-content pre {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    box-sizing: border-box;
+}
+
+.timeline-item-content code {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.timeline-item-content .table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.timeline-item-content table {
+    max-width: 100%;
 }
 
 /* 长过程详情：跳过视口外时间线条目的布局/绘制，减轻大段工具输出时的主线程压力 */
@@ -14649,6 +14701,7 @@ tr.mcp-stats-tool-row[data-tool-name]:focus-visible {
 }
 .webshell-ai-process-block .process-details-content .progress-timeline.expanded {
     max-height: 2000px;
+    overflow-x: hidden;
     overflow-y: auto;
 }
 

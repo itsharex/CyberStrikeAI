@@ -172,6 +172,59 @@ function einoMainStreamPlanningTitle(responseData) {
     return prefix + '📝 ' + plan;
 }
 
+/**
+ * 主通道 response 结束时：将流式占位条目固化为 planning（与后端 flushResponsePlan 落库类型一致），
+ * 避免 integrateProgressToMCPSection 快照前删除占位导致「助手输出」仅刷新后才出现。
+ */
+function finalizeMainResponseStreamItem(streamState, finalMessage, responseData) {
+    if (!streamState || !streamState.itemId) return false;
+    const item = document.getElementById(streamState.itemId);
+    if (!item || !item.parentNode) return false;
+
+    const fullText = (finalMessage != null && String(finalMessage).trim() !== '')
+        ? String(finalMessage)
+        : (streamState.buffer || '');
+    if (!String(fullText).trim()) {
+        item.parentNode.removeChild(item);
+        return false;
+    }
+
+    const meta = Object.assign({}, streamState.streamMeta || {}, responseData || {});
+
+    item.classList.remove('timeline-item-thinking');
+    item.classList.add('timeline-item-planning');
+    item.dataset.timelineType = 'planning';
+    delete item.dataset.responseStreamPlaceholder;
+    if (meta.orchestration != null && String(meta.orchestration).trim() !== '') {
+        item.dataset.orchestration = String(meta.orchestration).trim();
+    }
+    if (meta.einoAgent != null && String(meta.einoAgent).trim() !== '') {
+        item.dataset.einoAgent = String(meta.einoAgent).trim();
+    }
+
+    const titleEl = item.querySelector('.timeline-item-title');
+    if (titleEl && typeof einoMainStreamPlanningTitle === 'function') {
+        titleEl.textContent = einoMainStreamPlanningTitle(meta);
+    }
+
+    let contentEl = item.querySelector('.timeline-item-content');
+    if (!contentEl) {
+        contentEl = document.createElement('div');
+        contentEl.className = 'timeline-item-content';
+        item.appendChild(contentEl);
+    }
+    flushStreamPlainTextUpdate(contentEl);
+    const body = typeof formatTimelineStreamBody === 'function'
+        ? formatTimelineStreamBody(fullText, meta)
+        : fullText;
+    if (typeof formatMarkdown === 'function') {
+        setTimelineItemContentStreamRich(contentEl, formatMarkdown(body, timelineMarkdownOpts));
+    } else {
+        setTimelineItemContentStreamPlain(contentEl, body);
+    }
+    return true;
+}
+
 function translateProgressMessage(message, data) {
     if (!message || typeof message !== 'string') return message;
     if (typeof window.t !== 'function') return message;
@@ -224,6 +277,7 @@ if (typeof window !== 'undefined') {
     window.translateProgressMessage = translateProgressMessage;
     window.translatePlanExecuteAgentName = translatePlanExecuteAgentName;
     window.einoMainStreamPlanningTitle = einoMainStreamPlanningTitle;
+    window.finalizeMainResponseStreamItem = finalizeMainResponseStreamItem;
     window.formatTimelineStreamBody = formatTimelineStreamBody;
 }
 
@@ -2401,14 +2455,18 @@ function handleStreamEvent(event, progressElement, progressId,
                 updateAssistantBubbleContent(assistantIdFinal, event.message, true);
             }
 
-            // 移除 response_start/response_delta 阶段创建的「规划中」占位条目。
-            // 该条目属于 UI-only 的流式展示，不应被拷贝到最终的过程详情里；
-            // 否则会出现“不刷新页面仍显示规划中，刷新后消失”的不一致。
+            // 将 response_start/response_delta 占位固化为 planning，与后端落库一致后再快照过程详情
             if (streamState && streamState.itemId) {
-                const planningItem = document.getElementById(streamState.itemId);
-                if (planningItem && planningItem.parentNode) {
-                    planningItem.parentNode.removeChild(planningItem);
-                }
+                finalizeMainResponseStreamItem(streamState, event.message, responseData);
+            } else if (event.message && String(event.message).trim()) {
+                addTimelineItem(timeline, 'planning', {
+                    title: typeof einoMainStreamPlanningTitle === 'function'
+                        ? einoMainStreamPlanningTitle(responseData)
+                        : ('📝 ' + (typeof window.t === 'function' ? window.t('chat.planning') : '规划中')),
+                    message: event.message,
+                    data: responseData,
+                    expanded: false
+                });
             }
 
             // 最终回复时隐藏进度卡片（多代理模式下，迭代过程已完整展示）
