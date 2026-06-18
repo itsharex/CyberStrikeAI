@@ -58,7 +58,7 @@ openai:
   api_key: sk-xxxxxxx # API 密钥（必填）
   model: qwen3-max # 模型名称（必填）
   max_total_tokens: 120000 # LLM 相关上下文的最大 Token 数限制（内存压缩和攻击链构建会共用此配置）
-  # Eino 路径模型推理：DeepSeek/OpenAI 为 thinking / reasoning_effort 等；provider 为 claude 时合并为 Anthropic 顶层 thinking（extended thinking），mode: off 关闭
+  # Eino 路径模型推理：DeepSeek/OpenAI 为 thinking / reasoning_effort；Claude 4.6+ 为 adaptive + output_config.effort（仅显式配置 effort 时下发）；3.7 为 enabled+budget_tokens:10000（文档示例），effort 不映射，自定义预算用 extra_request_fields
   reasoning:
     mode: on # auto | on | off；off 时不附加任何推理扩展字段
     effort: high # low | medium | high | max | xhigh（最高档：OpenAI 常用 xhigh，部分网关用 max，原样下发）；空表示不指定
