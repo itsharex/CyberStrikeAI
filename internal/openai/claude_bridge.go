@@ -10,7 +10,7 @@ package openai
 //   Auth:     Bearer → x-api-key
 //   Tools:    OpenAI tools[] → Claude tools[] (input_schema)
 //
-// Extended thinking: 顶层 `thinking` 从 OpenAI 请求体透传；响应中 `thinking` block 映射为
+// Extended thinking: 顶层 `thinking` / `output_config` 从 OpenAI 请求体透传；响应中 `thinking` block 映射为
 // `reasoning_content`（可读前缀 + 内部 JSON 尾缀以保留 signature，供多轮工具续跑；UI 用 openai.DisplayReasoningContent 剥离）。
 
 import (
@@ -40,8 +40,9 @@ type claudeRequest struct {
 	System    string          `json:"system,omitempty"`
 	Messages  []claudeMessage `json:"messages"`
 	Tools     []claudeTool    `json:"tools,omitempty"`
-	Stream    bool            `json:"stream,omitempty"`
-	Thinking  json.RawMessage `json:"thinking,omitempty"`
+	Stream       bool            `json:"stream,omitempty"`
+	Thinking     json.RawMessage `json:"thinking,omitempty"`
+	OutputConfig json.RawMessage `json:"output_config,omitempty"`
 }
 
 type claudeMessage struct {
@@ -304,10 +305,15 @@ func convertOpenAIToClaude(payload interface{}) (*claudeRequest, error) {
 		}
 	}
 
-	// Extended thinking (Anthropic top-level); merged from Eino ExtraFields / admin extras.
+	// Extended thinking + effort (Anthropic top-level); merged from Eino ExtraFields / admin extras.
 	if th, ok := oai["thinking"]; ok && th != nil {
 		if raw, err := json.Marshal(th); err == nil && len(raw) > 0 && string(raw) != "null" {
 			req.Thinking = json.RawMessage(raw)
+		}
+	}
+	if oc, ok := oai["output_config"]; ok && oc != nil {
+		if raw, err := json.Marshal(oc); err == nil && len(raw) > 0 && string(raw) != "null" {
+			req.OutputConfig = json.RawMessage(raw)
 		}
 	}
 
